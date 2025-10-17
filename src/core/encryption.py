@@ -1,26 +1,30 @@
 """Handles all cryptographic operations."""
 
 import base64
-import hashlib
-from cryptography.fernet import Fernet, InvalidToken
+import os
+from argon2.low_level import hash_secret, Type as Argon2Type
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.exceptions import InvalidTag
 from exceptions import DecryptionError
 from config import Config
 
 
-def derive_keys(password: bytes, salt: bytes, iterations: int) -> tuple:
+def derive_keys(password: bytes, salt: bytes) -> tuple:
     """
-    Derive both encryption and HMAC keys from password.
-    Returns: (encryption_key, hmac_key)
+    Derive both encryption and HMAC keys from password using Argon2id.
+    Returns: (encryption_key, hmac_key) as raw bytes.
     """
-    # Derive 64 bytes, split into two 32-byte keys
-    kdf = hashlib.pbkdf2_hmac(
-        hash_name="sha256",
-        password=password,
+    kdf = hash_secret(
+        secret=password,
         salt=salt,
-        iterations=iterations,
-        dklen=64,
+        time_cost=Config.ARGON2_TIME_COST,
+        memory_cost=Config.ARGON2_MEMORY_COST,
+        parallelism=Config.ARGON2_PARALLELISM,
+        hash_len=Config.ARGON2_KEY_LEN,
+        type=Argon2Type.ID
     )
-    enc_key = base64.urlsafe_b64encode(kdf[:32])
+    # Use first 32 bytes for AES key, next 32 for HMAC key
+    enc_key = kdf[:32]
     hmac_key = kdf[32:]
     return enc_key, hmac_key
 
@@ -30,7 +34,6 @@ def derive_key_from_phrase(phrase: str, salt: bytes) -> tuple:
     return derive_keys(
         phrase.encode("utf-8"),
         salt,
-        Config.PBKDF2_ITERATIONS_RECOVERY
     )
 
 
@@ -39,7 +42,6 @@ def derive_key_from_device_token(token: bytes, salt: bytes) -> tuple:
     return derive_keys(
         token,
         salt,
-        Config.PBKDF2_ITERATIONS_DEVICE
     )
 
 
@@ -50,18 +52,23 @@ def derive_profile_specific_keys(master_password: str, profile_name: str,
     return derive_keys(
         key_material,
         salt,
-        Config.PBKDF2_ITERATIONS_PROFILE
     )
 
 
 def encrypt_data(data: bytes, key: bytes) -> bytes:
-    """Encrypts data using Fernet (AES-128-CBC + HMAC)."""
-    return Fernet(key).encrypt(data)
+    """Encrypts data using AES-256-GCM."""
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)  # GCM recommended nonce size
+    ciphertext = aesgcm.encrypt(nonce, data, None)
+    return nonce + ciphertext  # Prepend nonce to ciphertext
 
 
 def decrypt_data(token: bytes, key: bytes) -> bytes:
     """Decrypts data. Raises DecryptionError on failure."""
     try:
-        return Fernet(key).decrypt(token)
-    except InvalidToken:
+        aesgcm = AESGCM(key)
+        nonce = token[:12]
+        ciphertext = token[12:]
+        return aesgcm.decrypt(nonce, ciphertext, None)
+    except InvalidTag:
         raise DecryptionError("Decryption failed. Data may be corrupt or key is incorrect.")

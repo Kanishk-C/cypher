@@ -6,6 +6,8 @@ import bcrypt
 import uuid
 import base64
 import logging
+from argon2 import PasswordHasher
+from argon2.exceptions import HashingError, VerifyMismatchError
 from data import database
 from core import encryption
 from core.security import SecureFileHandler, IntegrityVerifier, SecureMemory
@@ -14,10 +16,33 @@ from utils.validators import InputValidator
 from exceptions import DecryptionError, CoreException
 from config import Config
 
+ph = PasswordHasher(
+    time_cost=Config.ARGON2_TIME_COST,
+    memory_cost=Config.ARGON2_MEMORY_COST,
+    parallelism=Config.ARGON2_PARALLELISM,
+    hash_len=Config.ARGON2_PASS_HASH_LEN,
+    salt_len=Config.ARGON2_SALT_LEN
+)
 
-def hash_master_password(password: str) -> bytes:
-    """Hashes a password using bcrypt."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12))
+
+def hash_master_password(password: str) -> str:
+    """Hashes a password using Argon2id."""
+    try:
+        return ph.hash(password)
+    except HashingError as e:
+        raise CoreException(f"Password hashing failed: {e}")
+
+
+def verify_master_password(password_hash: str, password: str) -> bool:
+    """Verifies a password against an Argon2id hash."""
+    try:
+        ph.verify(password_hash, password)
+        return True
+    except VerifyMismatchError:
+        return False
+    except Exception as e:
+        logging.error(f"Password verification error: {e}")
+        return False
 
 
 def initial_setup():
@@ -185,7 +210,7 @@ def unlock_session():
         # Decrypt God Key
         enc_key, hmac_key = encryption.derive_key_from_device_token(device_token, salt)
         raw_god_key = IntegrityVerifier.verify_and_decrypt(protected_god_key, enc_key, hmac_key)
-        session_god_key = (base64.urlsafe_b64encode(raw_god_key[:32]), raw_god_key[32:])
+        session_god_key = (raw_god_key[:32], raw_god_key[32:])
         
     except CoreException as e:
         print(f"{colors.Colors.BRIGHT_RED}✗ Authentication failed: {e.message}{colors.Colors.RESET}")

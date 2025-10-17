@@ -8,6 +8,7 @@ import secrets
 import time
 import logging
 import gc
+import base64
 from typing import Optional, Tuple
 from cryptography.fernet import Fernet, InvalidToken
 from exceptions import CoreException
@@ -154,7 +155,9 @@ class IntegrityVerifier:
     @staticmethod
     def protect_data(data: bytes, enc_key: bytes, hmac_key: bytes) -> bytes:
         """Encrypt data and append HMAC tag (Encrypt-then-MAC)."""
-        encrypted = Fernet(enc_key).encrypt(data)
+        # Fernet requires a URL-safe base64-encoded 32-byte key.
+        b64_enc_key = base64.urlsafe_b64encode(enc_key)
+        encrypted = Fernet(b64_enc_key).encrypt(data)
         tag = IntegrityVerifier.create_hmac(encrypted, hmac_key)
         return encrypted + tag
     
@@ -172,7 +175,9 @@ class IntegrityVerifier:
             raise CoreException("Integrity verification failed - data may be tampered")
         
         try:
-            fernet = Fernet(enc_key)
+            # Fernet requires a URL-safe base64-encoded 32-byte key.
+            b64_enc_key = base64.urlsafe_b64encode(enc_key)
+            fernet = Fernet(b64_enc_key)
             # If ttl is specified, Fernet will verify timestamp
             if ttl is not None:
                 return fernet.decrypt(encrypted, ttl=ttl)

@@ -9,10 +9,14 @@ class Config:
     LOCKOUT_TIME_SECONDS = 300
     SESSION_TIMEOUT_MINUTES = 15
     
-    # Cryptography - INCREASED ITERATIONS (2025 recommendations)
-    PBKDF2_ITERATIONS_DEVICE = 200000      # Increased from 100k
-    PBKDF2_ITERATIONS_PROFILE = 600000     # Increased from 250k
-    PBKDF2_ITERATIONS_RECOVERY = 700000    # Increased from 350k
+    # Argon2 Parameters (OWASP Recommendations) for Key Derivation and Hashing
+    ARGON2_TIME_COST = 2         # Iterations
+    ARGON2_MEMORY_COST = 19456   # 19 MiB in KiB
+    ARGON2_PARALLELISM = 1       # Number of threads
+    ARGON2_KEY_LEN = 64          # For deriving 64 bytes (enc_key + hmac_key)
+    ARGON2_PASS_HASH_LEN = 32    # For password hashing
+    ARGON2_SALT_LEN = 16
+    
     KEY_SIZE_BYTES = 32
     SALT_SIZE_BYTES = 16
     HMAC_SIZE_BYTES = 32

@@ -259,8 +259,8 @@ def update_command(args, app: App):
         views.show_warning("Update cancelled")
 
 
-def restart_command(args, app: App):
-    """Signal handler for the restart command."""
+def switch_command(args, app: App):
+    """Signal handler for the switch command."""
     pass
 
 

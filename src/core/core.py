@@ -51,7 +51,7 @@ class App:
             creation_date, salt, password_hash = profile_details
             
             # Verify password
-            if not bcrypt.checkpw(master_password.encode("utf-8"), password_hash):
+            if not auth.verify_master_password(password_hash, master_password):
                 logging.warning(f"Failed login attempt for profile: '{profile_name}'")
                 return False
             
