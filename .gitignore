@@ -1,0 +1,54 @@
+# ===================================================================
+# Security - CRITICAL for a Password Manager
+# ===================================================================
+
+# NEVER commit the password database or encrypted vault.
+# Add the specific name of your password storage file here.
+*.db
+*.sqlite3
+*.vault
+master_vault.json
+passwords.enc
+
+# NEVER commit encryption keys, salts, or secrets.
+*.key
+secret.key
+salt.txt
+
+# Environment variables and sensitive local configuration
+.env
+config.ini
+
+# Log files can contain sensitive runtime information
+*.log
+
+# ===================================================================
+# Python Project Files
+# ===================================================================
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ===================================================================
+# OS and IDE specific
+# ===================================================================
+
+# OS-generated files (macOS, Windows)
+.DS_Store
+Thumbs.db
+
+# IDE configuration (VSCode, JetBrains)
+.vscode/
+.idea/
