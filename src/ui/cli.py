@@ -4,6 +4,7 @@ import logging
 import shlex
 import time
 import os
+import gc
 import threading
 from src.data import database
 from src.core import app, auth
@@ -37,6 +38,20 @@ def start_interactive_shell(app_session: app.App) -> str:
     Runs the continuous interactive command loop for a loaded profile.
     Returns 'SWITCH' or 'EXIT'.
     """
+
+    def cleanup_on_timeout():
+        """Force cleanup of sensitive data."""
+        try:
+            app_session.unload_profile()
+        except:
+            pass
+        gc.collect()
+
+    session_manager = SessionManager(
+        on_timeout=handle_timeout, cleanup_callback=cleanup_on_timeout  # NEW
+    )
+    session_manager.start()
+
     arg_parser = parser.initialize_parser()
     views.clear_screen()
     views.show_banner()
@@ -68,12 +83,6 @@ def start_interactive_shell(app_session: app.App) -> str:
         "exit",
         "delete-profile",
     ]
-
-    # Initialize and start the session manager
-    session_manager = SessionManager(on_timeout=handle_timeout)
-    session_manager.start()
-    SESSION_TIMED_OUT.clear()
-
     while True:
         # Check for session timeout at the beginning of each loop
         if SESSION_TIMED_OUT.is_set():

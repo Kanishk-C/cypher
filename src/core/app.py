@@ -3,6 +3,7 @@
 import sqlite3
 import io
 import os
+import re
 import logging
 from datetime import datetime
 from src.core.crypto import (
@@ -40,72 +41,73 @@ class App:
 
     def load_user_profile(self, profile_name: str, master_password_str: str) -> bool:
         """Load or create a user profile."""
+        profile_details = database.get_profile_details(self.profiles_conn, profile_name)
+
+        # Use SecureString for the entire method to keep password in memory
         with SecureString(master_password_str) as master_password:
-            profile_details = database.get_profile_details(
-                self.profiles_conn, profile_name
-            )
+            if not profile_details:
+                # Create new profile
+                logging.info(f"Creating new profile: '{profile_name}'")
+                salt = generate_salt()
+                creation_date = datetime.utcnow().isoformat()
+                password_hash = hash_password(master_password.get())
 
-        if not profile_details:
-            # Create new profile
-            logging.info(f"Creating new profile: '{profile_name}'")
-            salt = generate_salt()
-            creation_date = datetime.utcnow().isoformat()
-            password_hash = hash_password(master_password.get())
+                database.add_profile_entry(
+                    self.profiles_conn, profile_name, creation_date, salt, password_hash
+                )
 
-            database.add_profile_entry(
-                self.profiles_conn, profile_name, creation_date, salt, password_hash
-            )
-
-            self.user_db_conn = database.db_connect()
-            database.initialize_user_db(self.user_db_conn)
-
-            self.profile_keys = derive_profile_keys(
-                master_password.get(), profile_name, creation_date, salt
-            )
-            self.profile_name = profile_name
-
-            logging.info(f"Profile '{profile_name}' created successfully")
-            return True
-        else:
-            # Load existing profile
-            creation_date, salt, password_hash = profile_details
-
-            if not verify_password(password_hash, master_password.get()):
-                logging.warning(f"Failed login attempt for profile: '{profile_name}'")
-                return False
-
-            self.profile_keys = derive_profile_keys(
-                master_password.get(), profile_name, creation_date, salt
-            )
-
-            user_db_path = database.get_user_profile_path(profile_name)
-
-            if not os.path.exists(user_db_path):
-                # No existing profile DB file, initialize a new one
                 self.user_db_conn = database.db_connect()
                 database.initialize_user_db(self.user_db_conn)
+
+                self.profile_keys = derive_profile_keys(
+                    master_password.get(), profile_name, creation_date, salt
+                )
+                self.profile_name = profile_name
+
+                SecureLogger.log_info(f"Profile '{profile_name}' created successfully")
+                return True
             else:
-                try:
-                    protected_db = SecureFileHandler.read_secure(user_db_path)
-                    if protected_db is None:
-                        # Unable to read file - treat as fresh DB
-                        self.user_db_conn = database.db_connect()
-                        database.initialize_user_db(self.user_db_conn)
-                    else:
-                        # At this point profile_keys is set above, so narrow types
-                        assert self.profile_keys is not None
-                        decrypted = IntegrityVerifier.verify_and_decrypt(
-                            protected_db, self.profile_keys[0], self.profile_keys[1]
-                        )
-                        self.user_db_conn = database.db_connect()
-                        self.user_db_conn.executescript(decrypted.decode("utf-8"))
-                except CoreException:
-                    logging.error(f"Failed to decrypt profile '{profile_name}'")
+                # Load existing profile
+                creation_date, salt, password_hash = profile_details
+
+                if not verify_password(password_hash, master_password.get()):
+                    logging.warning(
+                        f"Failed login attempt for profile: '{profile_name}'"
+                    )
                     return False
 
-            self.profile_name = profile_name
-            logging.info(f"Profile '{profile_name}' logged in successfully")
-            return True
+                self.profile_keys = derive_profile_keys(
+                    master_password.get(), profile_name, creation_date, salt
+                )
+
+                user_db_path = database.get_user_profile_path(profile_name)
+
+                if not os.path.exists(user_db_path):
+                    # No existing profile DB file, initialize a new one
+                    self.user_db_conn = database.db_connect()
+                    database.initialize_user_db(self.user_db_conn)
+                else:
+                    try:
+                        protected_db = SecureFileHandler.read_secure(user_db_path)
+                        if protected_db is None:
+                            # Unable to read file - treat as fresh DB
+                            self.user_db_conn = database.db_connect()
+                            database.initialize_user_db(self.user_db_conn)
+                        else:
+                            # At this point profile_keys is set above, so narrow types
+                            assert self.profile_keys is not None
+                            decrypted = IntegrityVerifier.verify_and_decrypt(
+                                protected_db, self.profile_keys[0], self.profile_keys[1]
+                            )
+                            self.user_db_conn = database.db_connect()
+                            self.user_db_conn.executescript(decrypted.decode("utf-8"))
+                    except CoreException:
+                        logging.error(f"Failed to decrypt profile '{profile_name}'")
+                        return False
+
+                self.profile_name = profile_name
+                logging.info(f"Profile '{profile_name}' logged in successfully")
+                return True
 
     def is_profile_loaded(self) -> bool:
         """Check if a user profile is active."""
@@ -307,3 +309,34 @@ class App:
         SecureDelete.secure_delete_file(profile_path)
 
         logging.info(f"Securely deleted profile: {profile_name}")
+
+
+class SecureLogger:
+    """Wrapper for logging that redacts sensitive information."""
+
+    @staticmethod
+    def redact_sensitive(message: str) -> str:
+        """Redact service names, usernames, and profile names."""
+        # Redact text in quotes
+        message = re.sub(r"'([^']+)'", r"'***'", message)
+        # Redact text in parentheses
+        message = re.sub(r"\(([^)]+)\)", r"(***)", message)
+        return message
+
+    @staticmethod
+    def log_info(message: str):
+        """Log info with redaction."""
+        redacted = SecureLogger.redact_sensitive(message)
+        logging.info(redacted)
+
+    @staticmethod
+    def log_warning(message: str):
+        """Log warning with redaction."""
+        redacted = SecureLogger.redact_sensitive(message)
+        logging.warning(redacted)
+
+    @staticmethod
+    def log_error(message: str):
+        """Log error with redaction."""
+        redacted = SecureLogger.redact_sensitive(message)
+        logging.error(redacted)

@@ -264,3 +264,55 @@ class RateLimiter:
         """Reset attempts after successful login."""
         if identifier in self.attempts:
             del self.attempts[identifier]
+
+
+class NonceTracker:
+    """
+    Track used nonces to prevent IV reuse.
+    Note: In practice, with 96-bit nonces, collision is ~2^-96
+    This is mostly for paranoid security applications.
+    """
+
+    def __init__(self, max_nonces: int = 100000):
+        self._used_nonces = set()
+        self._max_nonces = max_nonces
+        self._lock = threading.Lock()
+
+    def check_and_register(self, nonce: bytes) -> bool:
+        """Check if nonce was used, register if not."""
+        with self._lock:
+            if nonce in self._used_nonces:
+                return False  # Collision detected!
+
+            self._used_nonces.add(nonce)
+
+            # Rotate set if too large
+            if len(self._used_nonces) > self._max_nonces:
+                # Remove oldest 20%
+                to_remove = len(self._used_nonces) // 5
+                for _ in range(to_remove):
+                    self._used_nonces.pop()
+
+            return True
+
+
+# Global nonce tracker (optional)
+_nonce_tracker = NonceTracker()
+
+
+def encrypt_data_with_tracking(data: bytes, key: bytes) -> bytes:
+    """Encryption with nonce collision detection."""
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        aesgcm = AESGCM(key)
+        nonce = secrets.token_bytes(12)
+
+        if _nonce_tracker.check_and_register(nonce):
+            # Nonce is unique, proceed
+            ciphertext = aesgcm.encrypt(nonce, data, None)
+            return nonce + ciphertext
+
+        logging.warning(f"Nonce collision detected (attempt {attempt+1})")
+
+    raise CoreException("Failed to generate unique nonce after retries")
