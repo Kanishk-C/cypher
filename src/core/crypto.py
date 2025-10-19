@@ -9,6 +9,7 @@ import gc
 import time
 import tempfile
 import logging
+import threading  # ADDED - Missing import
 from typing import Tuple, Optional
 
 try:

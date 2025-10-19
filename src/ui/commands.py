@@ -1,4 +1,4 @@
-"""Command handlers with improved validation and UX."""
+"""Command handlers with improved validation and UX - FIXED VERSION"""
 
 import secrets
 import string
@@ -274,7 +274,7 @@ def create_new_profile_flow(profile_name: str) -> str | None:
     views.show_section_header(f"Create New Profile: {profile_name}")
     while True:
         p1_str = views.prompt_password_masked(
-            f"Create master password (min {Config.MIN_MASTER_PASSWORD_LENGTH} chars):"
+            f"Create master password (min {Config.MIN_MASTER_PASSWORD_LENGTH} chars): "
         )
         valid, msg = InputValidator.validate_password_strength(
             p1_str, Config.MIN_MASTER_PASSWORD_LENGTH
@@ -283,11 +283,9 @@ def create_new_profile_flow(profile_name: str) -> str | None:
             views.show_warning(msg)
             continue
 
-        p2_str = views.prompt_password_masked("Confirm master password:")
+        p2_str = views.prompt_password_masked("Confirm master password: ")
 
         if safe_string_compare(p1_str, p2_str):
-            # Return the raw string for immediate use by the calling function.
-            # The calling function is responsible for its secure handling.
             return p1_str
         else:
             views.show_error("Passwords do not match.")
@@ -296,14 +294,14 @@ def create_new_profile_flow(profile_name: str) -> str | None:
 
 
 def login_flow(app_session: app.App, profile_name: str) -> bool:
-    """Handles the login process for an existing profile."""
+    """Handles the login process for an existing profile - FIXED."""
     max_attempts = 3
     for attempt in range(max_attempts):
         master_password_str = views.prompt_password_masked(
-            f"Master password for '{profile_name}':"
+            f"Master password for '{profile_name}': "
         )
 
-        # Pass the raw string to load_user_profile, which handles it securely
+        # FIX: Only prompt once and use that password
         if app_session.load_user_profile(profile_name, master_password_str):
             return True
         else:

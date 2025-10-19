@@ -3,7 +3,6 @@
 import sqlite3
 import io
 import os
-import re
 import logging
 from datetime import datetime
 from src.core.crypto import (
@@ -64,7 +63,7 @@ class App:
                 )
                 self.profile_name = profile_name
 
-                SecureLogger.log_info(f"Profile '{profile_name}' created successfully")
+                logging.info(f"Profile '{profile_name}' created successfully")
                 return True
             else:
                 # Load existing profile
@@ -309,34 +308,3 @@ class App:
         SecureDelete.secure_delete_file(profile_path)
 
         logging.info(f"Securely deleted profile: {profile_name}")
-
-
-class SecureLogger:
-    """Wrapper for logging that redacts sensitive information."""
-
-    @staticmethod
-    def redact_sensitive(message: str) -> str:
-        """Redact service names, usernames, and profile names."""
-        # Redact text in quotes
-        message = re.sub(r"'([^']+)'", r"'***'", message)
-        # Redact text in parentheses
-        message = re.sub(r"\(([^)]+)\)", r"(***)", message)
-        return message
-
-    @staticmethod
-    def log_info(message: str):
-        """Log info with redaction."""
-        redacted = SecureLogger.redact_sensitive(message)
-        logging.info(redacted)
-
-    @staticmethod
-    def log_warning(message: str):
-        """Log warning with redaction."""
-        redacted = SecureLogger.redact_sensitive(message)
-        logging.warning(redacted)
-
-    @staticmethod
-    def log_error(message: str):
-        """Log error with redaction."""
-        redacted = SecureLogger.redact_sensitive(message)
-        logging.error(redacted)

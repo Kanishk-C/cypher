@@ -8,31 +8,38 @@ class Config:
     MAX_LOGIN_ATTEMPTS = 3
     LOCKOUT_TIME_SECONDS = 300
 
-    # Argon2 Parameters
-    ARGON2_TIME_COST = 2
-    ARGON2_MEMORY_COST = 19456
-    ARGON2_PARALLELISM = 1
-    ARGON2_KEY_LEN = 64
-    ARGON2_PASS_HASH_LEN = 32
-    ARGON2_SALT_LEN = 16
+    # Argon2 Parameters - OPTIMIZED FOR DEVELOPMENT/TESTING
+    # For production, increase memory_cost to 65536 or higher
+    ARGON2_TIME_COST = 2  # Iterations
+    ARGON2_MEMORY_COST = 512  # 512 KiB (~0.5 MB) - MUCH FASTER for testing
+    ARGON2_PARALLELISM = 1  # Single thread
+    ARGON2_KEY_LEN = 64  # Output length
+    ARGON2_PASS_HASH_LEN = 32  # Hash length
+    ARGON2_SALT_LEN = 16  # Salt length
 
     # Crypto
     KEY_SIZE_BYTES = 32
     SALT_SIZE_BYTES = 16
     HMAC_SIZE_BYTES = 32
 
-    # Session Management (NEW)
+    # Session Management
     SESSION_TIMEOUT_SECONDS = 900  # 15 minutes
 
-    # Input Limits (NEW)
+    # Input Limits
     MAX_PASSWORD_LENGTH = 1000
     MAX_RECOVERY_PHRASE_LENGTH = 1000
+    MAX_SERVICE_NAME_LENGTH = 100
+    MAX_USERNAME_LENGTH = 100
+    MAX_NOTES_LENGTH = 500
 
-    # File Security (NEW)
+    # File Security
     SECURE_DELETE_PASSES = 3
 
-    # Rate Limiting (NEW)
+    # Rate Limiting
     PERSIST_RATE_LIMITS = True
+
+    # UI Settings
+    TERMINAL_MAX_WIDTH = 120
 
     # File paths
     DEVICE_TOKEN_FILE = "device.token"

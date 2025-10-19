@@ -4,27 +4,21 @@ import logging
 import shlex
 import time
 import os
-import gc
-import threading
 from src.data import database
 from src.core import app, auth
-from src.core.session_manager import SessionManager
 from src.core.crypto import RateLimiter
 from src.ui import views, parser, colors, commands
 
 _rate_limiter = RateLimiter()
-SESSION_TIMED_OUT = threading.Event()
-
-
-def handle_timeout():
-    """Callback function executed by the SessionManager on timeout."""
-    SESSION_TIMED_OUT.set()
 
 
 def setup_logging():
     """Configures logging to a file within the application's storage directory."""
     storage_dir = database.get_storage_directory()
     log_file_path = os.path.join(storage_dir, "cypher_activity.log")
+
+    os.makedirs(storage_dir, exist_ok=True)
+
     logging.basicConfig(
         filename=log_file_path,
         level=logging.INFO,
@@ -38,34 +32,17 @@ def start_interactive_shell(app_session: app.App) -> str:
     Runs the continuous interactive command loop for a loaded profile.
     Returns 'SWITCH' or 'EXIT'.
     """
-
-    def cleanup_on_timeout():
-        """Force cleanup of sensitive data."""
-        try:
-            app_session.unload_profile()
-        except:
-            pass
-        gc.collect()
-
-    session_manager = SessionManager(
-        on_timeout=handle_timeout, cleanup_callback=cleanup_on_timeout  # NEW
-    )
-    session_manager.start()
-
     arg_parser = parser.initialize_parser()
+
+    # Clear screen and show UI
     views.clear_screen()
     views.show_banner()
+
     if app_session.profile_name:
         views.show_profile_header(app_session.profile_name)
-
-    try:
-        entries = app_session.list_all_entries()
-        services = set(service for service, _ in entries)
-        views.show_stats(len(entries), len(services))
-        if entries:
-            views.show_recent_activity(entries)
-    except Exception:
-        pass
+        print(
+            f"\n{colors.Colors.BRIGHT_GREEN}✓ Logged in successfully!{colors.Colors.RESET}\n"
+        )
 
     views.show_quick_help()
 
@@ -83,19 +60,9 @@ def start_interactive_shell(app_session: app.App) -> str:
         "exit",
         "delete-profile",
     ]
+
     while True:
-        # Check for session timeout at the beginning of each loop
-        if SESSION_TIMED_OUT.is_set():
-            views.show_warning(
-                "\nSession timed out due to inactivity. Profile has been locked."
-            )
-            session_manager.stop()
-            return "SWITCH"  # Force re-authentication
-
         try:
-            # Reset the inactivity timer with each user prompt
-            session_manager.reset_timer()
-
             prompt = (
                 f"{colors.Colors.BRIGHT_CYAN}cypher"
                 f"{colors.Colors.RESET}@{colors.Colors.BRIGHT_GREEN}{app_session.profile_name}"
@@ -108,10 +75,8 @@ def start_interactive_shell(app_session: app.App) -> str:
 
             lower_input = raw_input.lower()
             if lower_input in ("exit", "quit", "q"):
-                session_manager.stop()  # Stop timer on exit
                 return "EXIT"
             if lower_input in ("switch", "reload", "restart"):
-                session_manager.stop()  # Stop timer on switch
                 return "SWITCH"
 
             try:
@@ -119,7 +84,6 @@ def start_interactive_shell(app_session: app.App) -> str:
                 args = arg_parser.parse_args(split_input)
                 if hasattr(args, "func"):
                     if args.func == commands.switch_command:
-                        session_manager.stop()
                         return "SWITCH"
                     args.func(args, app_session)
                 else:
@@ -130,14 +94,12 @@ def start_interactive_shell(app_session: app.App) -> str:
                 views.show_error(f"Invalid command format: {e}")
 
         except KeyboardInterrupt:
-            session_manager.stop()  # Stop timer on interrupt
             print()
             return "EXIT"
         except Exception as e:
             logging.exception(f"Unexpected error in main loop: {e}")
-            views.show_error("An unexpected error occurred.")
+            views.show_error(f"An unexpected error occurred: {e}")
 
-    session_manager.stop()  # Ensure timer is stopped on normal exit
     return "EXIT"
 
 
@@ -185,6 +147,7 @@ def start_application():
             if not profile_name:
                 break
 
+            # Rate limiting
             allowed, wait_time = _rate_limiter.check_attempt(profile_name)
             if not allowed:
                 views.show_error(
@@ -196,25 +159,63 @@ def start_application():
             profile_details = database.get_profile_details(profiles_conn, profile_name)
 
             if not profile_details:
+                # NEW PROFILE - Create it
+                print(
+                    f"\n{colors.Colors.BRIGHT_YELLOW}Creating new profile...{colors.Colors.RESET}"
+                )
                 master_password = commands.create_new_profile_flow(profile_name)
                 if not master_password:
                     continue
 
-                views.show_loading(f"Creating profile '{profile_name}'")
-                if app_session.load_user_profile(profile_name, master_password):
-                    _rate_limiter.reset(profile_name)
-                else:
-                    views.show_error("Failed to create profile.")
+                try:
+                    print(
+                        f"{colors.Colors.BRIGHT_BLUE}⟳ Setting up profile...{colors.Colors.RESET}",
+                        end="",
+                        flush=True,
+                    )
+                    success = app_session.load_user_profile(
+                        profile_name, master_password
+                    )
+                    print("\r" + " " * 50 + "\r", end="", flush=True)
+
+                    if success:
+                        _rate_limiter.reset(profile_name)
+                        views.show_success(f"Profile '{profile_name}' created!")
+                        time.sleep(1)
+                    else:
+                        views.show_error("Failed to create profile.")
+                        continue
+                except Exception as e:
+                    print("\r" + " " * 50 + "\r", end="", flush=True)
+                    views.show_error(f"Error creating profile: {e}")
+                    logging.exception(f"Profile creation error")
                     continue
             else:
-                if not commands.login_flow(app_session, profile_name):
+                # EXISTING PROFILE - Login
+                print(
+                    f"\n{colors.Colors.BRIGHT_YELLOW}Logging in...{colors.Colors.RESET}"
+                )
+                try:
+                    if not commands.login_flow(app_session, profile_name):
+                        continue
+                    _rate_limiter.reset(profile_name)
+                except Exception as e:
+                    views.show_error(f"Login error: {e}")
+                    logging.exception(f"Login error")
                     continue
 
-            action = start_interactive_shell(app_session)
-            app_session.unload_profile()
+            # Start interactive shell
+            try:
+                action = start_interactive_shell(app_session)
+                app_session.unload_profile()
 
-            if action == "EXIT":
-                break
+                if action == "EXIT":
+                    break
+            except Exception as e:
+                views.show_error(f"Error in interactive shell: {e}")
+                logging.exception("Interactive shell error")
+                app_session.unload_profile()
+                continue
 
     except KeyboardInterrupt:
         print(
