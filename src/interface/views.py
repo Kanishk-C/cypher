@@ -84,7 +84,7 @@ def show_quick_help():
         ("generate", "Generate password", "gen"),
         ("clear", "Clear screen", "cls"),
         ("help", "Show full help", "h"),
-        ("restart", "Switch profile", ""),
+        ("switch", "Switch profile", "reload"),
         ("exit", "Quit application", "q")
     ]
 
@@ -115,8 +115,16 @@ def wait_for_user():
         print()
 
 
-def display_entry_list(entries):
-    """Displays an improved list of all entries."""
+def display_profile_list(profiles):
+    """Displays a list of available profiles."""
+    if not profiles:
+        return
+    print(f"{colors.Colors.BRIGHT_CYAN}Available Profiles: {colors.Colors.BRIGHT_GREEN}{', '.join(profiles)}{colors.Colors.RESET}")
+    print()
+
+
+def display_entry_list(entries, search_term: str = None):
+    """Displays a list of all entries, with optional search term highlighting."""
     show_section_header("Saved Credentials")
 
     if not entries:
@@ -135,15 +143,25 @@ def display_entry_list(entries):
         usernames = services[service]
         count += len(usernames)
 
+        # --- New: Highlighting Logic ---
+        display_service = service
+        if search_term:
+            import re
+            # Use regex to replace case-insensitively
+            display_service = re.sub(f"({re.escape(search_term)})", 
+                                     f"{colors.Colors.BRIGHT_YELLOW}\\1{colors.Colors.BRIGHT_GREEN}", 
+                                     service, flags=re.IGNORECASE)
+        # --- End of new section ---
+
         account_info = f"({len(usernames)} account{'s' if len(usernames) > 1 else ''})"
-        print(f"\n  {colors.Colors.BRIGHT_CYAN}●{colors.Colors.RESET} {colors.Colors.BRIGHT_GREEN}{service}{colors.Colors.RESET} {colors.Colors.BRIGHT_BLACK}{account_info}{colors.Colors.RESET}")
+        print(f"\n  {colors.Colors.BRIGHT_CYAN}●{colors.Colors.RESET} {colors.Colors.BRIGHT_GREEN}{display_service}{colors.Colors.RESET} {colors.Colors.BRIGHT_BLACK}{account_info}{colors.Colors.RESET}")
 
         for username in usernames:
             print(f"    {colors.Colors.BRIGHT_BLACK}└─{colors.Colors.RESET} {username}")
 
     print(f"\n{colors.Colors.BRIGHT_BLACK}Total: {count} credential{'s' if count != 1 else ''}{colors.Colors.RESET}\n")
 
-
+    
 def show_success(message):
     """Display a success message."""
     print(f"\n{colors.Colors.BRIGHT_GREEN}✓ {message}{colors.Colors.RESET}")
@@ -169,10 +187,13 @@ def prompt_input(prompt_text, color=colors.Colors.BRIGHT_BLUE):
     return input(f"{color}❯ {prompt_text}{colors.Colors.RESET} ").strip()
 
 
-def prompt_password(prompt_text):
-    """Standardized password prompt."""
-    import getpass
-    return getpass.getpass(f"{colors.Colors.BRIGHT_BLUE}❯ {prompt_text} {colors.Colors.RESET}")
+def prompt_password(prompt_text, hide_input=True):
+    """Standardized password prompt, with option to show input."""
+    if hide_input:
+        import getpass
+        return getpass.getpass(f"{colors.Colors.BRIGHT_BLUE}❯ {prompt_text} {colors.Colors.RESET}")
+    else:
+        return input(f"{colors.Colors.BRIGHT_YELLOW}❯ {prompt_text}{colors.Colors.RESET} ")
 
 
 def show_multiple_accounts_menu(service_name, entries):
@@ -233,3 +254,11 @@ def show_recent_activity(entries, limit=5):
     for service, username in entries[:limit]:
         print(f"{colors.Colors.BRIGHT_CYAN}│{colors.Colors.RESET}  {colors.Colors.BRIGHT_GREEN}●{colors.Colors.RESET} {service} ({username})")
     print(f"{colors.Colors.BRIGHT_CYAN}└{'─' * 30}{colors.Colors.RESET}\n")
+
+def show_entry_summary(service: str, username: str, notes: str):
+    """Displays a summary of an entry after an add or update operation."""
+    print(f"\n{colors.Colors.BRIGHT_GREEN}Entry Details:{colors.Colors.RESET}")
+    print(f"  {colors.Colors.BRIGHT_CYAN}Service:{colors.Colors.RESET}  {service}")
+    print(f"  {colors.Colors.BRIGHT_CYAN}Username:{colors.Colors.RESET} {username}")
+    if notes:
+        print(f"  {colors.Colors.BRIGHT_CYAN}Notes:{colors.Colors.RESET}    {notes}")

@@ -96,6 +96,12 @@ def get_profile_details(conn, profile_name):
     cursor.execute("SELECT creation_date, salt, password_hash FROM profiles WHERE profile_name = ?", (profile_name,))
     return cursor.fetchone()
 
+def get_all_profile_names(conn):
+    """Retrieves all profile names from the central profiles database."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT profile_name FROM profiles ORDER BY profile_name")
+    return [row[0] for row in cursor.fetchall()]
+
 # --- User Password CRUD Operations ---
 
 def add_password_entry(conn, service, username, encrypted_password, notes):

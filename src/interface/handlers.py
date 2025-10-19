@@ -57,7 +57,8 @@ def add_command(args, app: App):
         views.show_loading("Saving entry")
         app.add_password(service, username, password, notes)
         views.clear_loading()
-
+        views.show_success(f"Entry for '{service}' saved successfully!")
+        views.show_entry_summary(service, username, notes)
         views.show_success(f"Password for '{service}' ({username}) added successfully!")
 
     except DuplicateEntryError:
@@ -143,7 +144,7 @@ def get_command(args, app: App):
 
     except EntryNotFoundError:
         views.show_error(f"No entries found for '{service_name}'")
-        views.show_info("Use 'list' to see all saved services")
+        views.show_info("Use 'list' to see all entries or 'search <term>' to find a specific service.")
     except (DecryptionError, CoreException) as e:
         views.show_error(str(e))
     except KeyboardInterrupt:
@@ -187,7 +188,7 @@ def delete_command(args, app: App):
 
     except EntryNotFoundError:
         views.show_error(f"No entry found for '{service}' with username '{username}'")
-        views.show_info("Use 'list' to see all saved entries")
+        views.show_info("Use 'list' to see all saved entries or 'search <term>' to check the service name.")
     except CoreException as e:
         views.show_error(str(e))
     except KeyboardInterrupt:
@@ -247,7 +248,8 @@ def update_command(args, app: App):
             app.delete_password(service, username)
             app.add_password(service, username, new_password, new_notes)
             views.clear_loading()
-            views.show_success(f"Entry for '{service}' ({username}) updated successfully")
+            views.show_success(f"Entry for '{service}' updated successfully!")
+            views.show_entry_summary(service, username, new_notes)
         else:
             views.show_info("Update cancelled")
 
@@ -269,8 +271,6 @@ def clear_command(args, app: App):
     views.clear_screen()
     views.show_banner()
     views.show_profile_header(app.profile_name)
-    views.show_quick_help()
-
 
 def search_command(args, app: App):
     """Search for entries by partial service name."""
@@ -290,9 +290,8 @@ def search_command(args, app: App):
         matching_entries = [(s, u) for s, u in all_entries if search_term.lower() in s.lower()]
 
         if matching_entries:
-            print(f"\n{colors.Colors.BRIGHT_GREEN}Found {len(matching_entries)} matching entries:{colors.Colors.RESET}\n")
+            print(f"\n{colors.Colors.BRIGHT_GREEN}Found {len(matching_entries)} matching entries:{colors.Colors.RESET}\n")            
             views.display_entry_list(matching_entries)
-            views.wait_for_user()
         else:
             views.show_warning(f"No entries found matching '{search_term}'")
 
@@ -300,7 +299,6 @@ def search_command(args, app: App):
         views.show_error(str(e))
     except KeyboardInterrupt:
         views.show_warning("Search cancelled")
-
 
 def generate_password_command(args, app: App):
     """Generate a secure random password."""
@@ -318,11 +316,43 @@ def generate_password_command(args, app: App):
             views.show_warning("Password limited to 128 characters")
             length = 128
 
-        # Build character set
-        chars = string.ascii_letters + string.digits + "!@#$%^&*()_+-=[]{}|;:,.<>?"
+        # Interactive character set selection
+        include_lower = views.confirm_action("Include lowercase letters (abc)?")
+        include_upper = views.confirm_action("Include uppercase letters (ABC)?")
+        include_digits = views.confirm_action("Include numbers (123)?")
+        include_symbols = views.confirm_action("Include symbols (!@#)?")
 
-        # Generate password
-        password = ''.join(random.choice(chars) for _ in range(length))
+        # --- FIX: Guaranteed Character Set Inclusion ---
+        password_chars = []
+        char_pool = ""
+        
+        if include_lower:
+            char_pool += string.ascii_lowercase
+            password_chars.append(random.choice(string.ascii_lowercase))
+        if include_upper:
+            char_pool += string.ascii_uppercase
+            password_chars.append(random.choice(string.ascii_uppercase))
+        if include_digits:
+            char_pool += string.digits
+            password_chars.append(random.choice(string.digits))
+        if include_symbols:
+            symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+            char_pool += symbols
+            password_chars.append(random.choice(symbols))
+
+        if not char_pool:
+            views.show_error("Cannot generate a password with no character sets selected.")
+            return
+
+        # Fill the rest of the password length
+        remaining_length = length - len(password_chars)
+        if remaining_length > 0:
+            password_chars.extend(random.choice(char_pool) for _ in range(remaining_length))
+
+        # Shuffle the list to ensure randomness
+        random.shuffle(password_chars)
+        password = "".join(password_chars)
+        # --- End of FIX ---
 
         # Display generated password
         print(f"\n{colors.Colors.BRIGHT_CYAN}╭{'─' * 60}╮")

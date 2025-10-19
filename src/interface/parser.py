@@ -94,11 +94,10 @@ def initialize_parser():
                                      formatter_class=CustomHelpFormatter, prog="cypher generate")
     generate.set_defaults(func=handlers.generate_password_command)
 
-    # Restart command
-    switch = subparsers.add_parser("switch", aliases=["reload",],
+    # Switch command
+    switch = subparsers.add_parser("switch", aliases=["reload", "restart"],
                                     help="Log out and switch to another profile",
-                                    formatter_class=CustomHelpFormatter, prog="cypher logout and switch profile")
+                                    formatter_class=CustomHelpFormatter, prog="cypher switch")
     switch.set_defaults(func=handlers.switch_command)
 
     return parser
-

@@ -29,7 +29,7 @@ def setup_logging():
 def start_interactive_shell(app: core.App) -> str:
     """
     Runs the continuous interactive command loop for a loaded profile.
-    Returns 'RESTART' or 'EXIT'.
+    Returns 'SWITCH' or 'EXIT'.
     """
     arg_parser = parser.initialize_parser()
     views.clear_screen()
@@ -52,7 +52,7 @@ def start_interactive_shell(app: core.App) -> str:
     available_commands = [
         'add', 'a', 'get', 'g', 'list', 'l', 'delete', 'd',
         'update', 'u', 'search', 's', 'clear', 'cls', 'c',
-        'help', 'h', '?', 'restart', 'reload', 'switch',
+        'help', 'h', '?', 'switch', 'reload', 'restart',
         'exit', 'quit', 'q', 'stats', 'statistics', 'info', 'generate', 'gen'
     ]
 
@@ -71,8 +71,8 @@ def start_interactive_shell(app: core.App) -> str:
             if lower_input in ("exit", "quit", "q"):
                 return 'EXIT'
 
-            if lower_input in ("restart", "reload", "switch"):
-                return 'RESTART'
+            if lower_input in ("switch", "reload", "restart"):
+                return 'SWITCH'
 
             if lower_input in ("help", "h", "?"):
                 arg_parser.print_help()
@@ -109,8 +109,8 @@ def start_interactive_shell(app: core.App) -> str:
                 args = arg_parser.parse_args(split_input)
 
                 if hasattr(args, "func"):
-                    if args.func == handlers.restart_command:
-                        return 'RESTART'
+                    if args.func == handlers.switch_command:
+                        return 'SWITCH'
                     args.func(args, app)
                 else:
                     views.suggest_command(first_word, available_commands)
@@ -168,8 +168,12 @@ def start_application():
         while True:
             views.clear_screen()
             views.show_banner()
-            views.show_section_header("Profile Selection")
-
+            
+            # --- New Feature: List existing profiles ---
+            all_profiles = database.get_all_profile_names(profiles_conn)
+            if all_profiles:
+                views.display_profile_list(all_profiles)
+            
             print(f"{colors.Colors.BRIGHT_BLUE}Enter a profile name to login or create a new one.")
             print(f"Press Enter (empty) to exit Cypher.{colors.Colors.RESET}\n")
 
@@ -277,7 +281,7 @@ def start_application():
 
             if action == 'EXIT':
                 break
-            elif action == 'RESTART':
+            elif action == 'SWITCH':
                 views.show_info("Switching profiles...")
                 views.wait_for_user()
 
