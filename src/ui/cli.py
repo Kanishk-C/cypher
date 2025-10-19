@@ -1,5 +1,3 @@
-"""Enhanced CLI with rate limiting and improved UX."""
-
 import logging
 import shlex
 import time
@@ -41,7 +39,7 @@ def start_interactive_shell(app_session: app.App) -> str:
     if app_session.profile_name:
         views.show_profile_header(app_session.profile_name)
         print(
-            f"\n{colors.Colors.BRIGHT_GREEN}✓ Logged in successfully!{colors.Colors.RESET}\n"
+            f"\n{colors.Colors.SUCCESS}✓ Logged in successfully!{colors.Colors.RESET}\n"
         )
 
     views.show_quick_help()
@@ -64,9 +62,9 @@ def start_interactive_shell(app_session: app.App) -> str:
     while True:
         try:
             prompt = (
-                f"{colors.Colors.BRIGHT_CYAN}cypher"
-                f"{colors.Colors.RESET}@{colors.Colors.BRIGHT_GREEN}{app_session.profile_name}"
-                f"{colors.Colors.RESET} {colors.Colors.BRIGHT_BLUE}❯{colors.Colors.RESET} "
+                f"{colors.Colors.PROMPT}cypher"
+                f"{colors.Colors.RESET}@{colors.Colors.SUCCESS}{app_session.profile_name}"
+                f"{colors.Colors.RESET} {colors.Colors.PRIMARY}❯{colors.Colors.RESET} "
             )
             raw_input = input(prompt).strip()
 
@@ -104,7 +102,7 @@ def start_interactive_shell(app_session: app.App) -> str:
 
 
 def start_application():
-    """Main application entry point."""
+    """Main application entry point - FIXED VERSION."""
     app_session = None
     try:
         setup_logging()
@@ -127,9 +125,12 @@ def start_application():
 
         logging.info("Application unlocked successfully.")
         views.show_success("Session unlocked")
+        time.sleep(1)  # Brief pause to show success
+
         app_session = app.App(profiles_conn, session_god_key)
 
         while True:
+            # Only clear screen when returning to profile selection
             views.clear_screen()
             views.show_banner()
 
@@ -138,7 +139,7 @@ def start_application():
                 views.display_profile_list(all_profiles)
 
             print(
-                f"{colors.Colors.BRIGHT_BLUE}Enter a profile name to login or create a new one."
+                f"{colors.Colors.INFO}Enter a profile name to login or create a new one."
             )
             print(f"Press Enter to exit.{colors.Colors.RESET}\n")
 
@@ -153,7 +154,7 @@ def start_application():
                 views.show_error(
                     f"Too many failed attempts for '{profile_name}'. Please wait {wait_time} seconds."
                 )
-                time.sleep(2)
+                time.sleep(3)  # Give user time to read error
                 continue
 
             profile_details = database.get_profile_details(profiles_conn, profile_name)
@@ -161,15 +162,16 @@ def start_application():
             if not profile_details:
                 # NEW PROFILE - Create it
                 print(
-                    f"\n{colors.Colors.BRIGHT_YELLOW}Creating new profile...{colors.Colors.RESET}"
+                    f"\n{colors.Colors.WARNING}Creating new profile '{profile_name}'...{colors.Colors.RESET}"
                 )
                 master_password = commands.create_new_profile_flow(profile_name)
                 if not master_password:
+                    time.sleep(1)
                     continue
 
                 try:
                     print(
-                        f"{colors.Colors.BRIGHT_BLUE}⟳ Setting up profile...{colors.Colors.RESET}",
+                        f"{colors.Colors.INFO}⟳ Setting up profile...{colors.Colors.RESET}",
                         end="",
                         flush=True,
                     )
@@ -181,30 +183,36 @@ def start_application():
                     if success:
                         _rate_limiter.reset(profile_name)
                         views.show_success(f"Profile '{profile_name}' created!")
-                        time.sleep(1)
+                        time.sleep(1.5)
                     else:
                         views.show_error("Failed to create profile.")
+                        time.sleep(2)
                         continue
                 except Exception as e:
                     print("\r" + " " * 50 + "\r", end="", flush=True)
                     views.show_error(f"Error creating profile: {e}")
                     logging.exception(f"Profile creation error")
+                    time.sleep(2)
                     continue
             else:
                 # EXISTING PROFILE - Login
                 print(
-                    f"\n{colors.Colors.BRIGHT_YELLOW}Logging in...{colors.Colors.RESET}"
+                    f"\n{colors.Colors.WARNING}Logging in to '{profile_name}'...{colors.Colors.RESET}"
                 )
                 try:
+                    # FIXED: Don't clear screen before showing errors
                     if not commands.login_flow(app_session, profile_name):
+                        # Login failed - give user time to read error
+                        time.sleep(2.5)
                         continue
                     _rate_limiter.reset(profile_name)
                 except Exception as e:
                     views.show_error(f"Login error: {e}")
                     logging.exception(f"Login error")
+                    time.sleep(2.5)
                     continue
 
-            # Start interactive shell
+            # Start interactive shell ONLY after successful login
             try:
                 action = start_interactive_shell(app_session)
                 app_session.unload_profile()
@@ -215,11 +223,12 @@ def start_application():
                 views.show_error(f"Error in interactive shell: {e}")
                 logging.exception("Interactive shell error")
                 app_session.unload_profile()
+                time.sleep(2)
                 continue
 
     except KeyboardInterrupt:
         print(
-            f"\n\n{colors.Colors.BRIGHT_YELLOW}Session interrupted by user.{colors.Colors.RESET}"
+            f"\n\n{colors.Colors.WARNING}Session interrupted by user.{colors.Colors.RESET}"
         )
     except Exception as e:
         views.show_error(f"A critical error occurred: {e}")

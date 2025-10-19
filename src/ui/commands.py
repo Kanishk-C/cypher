@@ -295,20 +295,30 @@ def create_new_profile_flow(profile_name: str) -> str | None:
 
 def login_flow(app_session: app.App, profile_name: str) -> bool:
     """Handles the login process for an existing profile - FIXED."""
+    from src.ui import colors
+
     max_attempts = 3
     for attempt in range(max_attempts):
         master_password_str = views.prompt_password_masked(
             f"Master password for '{profile_name}': "
         )
 
-        # FIX: Only prompt once and use that password
         if app_session.load_user_profile(profile_name, master_password_str):
             return True
         else:
             remaining = max_attempts - attempt - 1
             if remaining > 0:
-                views.show_error(f"Incorrect password. {remaining} attempts remaining.")
+                # Show error prominently with remaining attempts
+                print(
+                    f"\n{colors.Colors.ERROR}✗ Incorrect password. "
+                    f"{colors.Colors.WARNING}{remaining} attempt{'s' if remaining != 1 else ''} remaining."
+                    f"{colors.Colors.RESET}"
+                )
             else:
-                views.show_error("Too many failed attempts.")
+                # Final failure
+                print(
+                    f"\n{colors.Colors.CRITICAL}✗ Authentication failed. "
+                    f"Too many incorrect attempts.{colors.Colors.RESET}"
+                )
                 return False
     return False
