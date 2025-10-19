@@ -15,6 +15,7 @@ from src.core.crypto import (
     IntegrityVerifier,
     SecureFileHandler,
 )
+from src.core.secure_delete import SecureDelete
 from src.data import database
 from src.exceptions import (
     CoreException,
@@ -24,6 +25,7 @@ from src.exceptions import (
     DecryptionError,
 )
 from src.ui.colors import Colors
+from src.core.secure_string import SecureString
 
 
 class App:
@@ -36,16 +38,19 @@ class App:
         self.user_db_conn: sqlite3.Connection | None = None
         self.profile_keys: tuple | None = None  # (enc_key, hmac_key)
 
-    def load_user_profile(self, profile_name: str, master_password: str) -> bool:
+    def load_user_profile(self, profile_name: str, master_password_str: str) -> bool:
         """Load or create a user profile."""
-        profile_details = database.get_profile_details(self.profiles_conn, profile_name)
+        with SecureString(master_password_str) as master_password:
+            profile_details = database.get_profile_details(
+                self.profiles_conn, profile_name
+            )
 
         if not profile_details:
             # Create new profile
             logging.info(f"Creating new profile: '{profile_name}'")
             salt = generate_salt()
             creation_date = datetime.utcnow().isoformat()
-            password_hash = hash_password(master_password)
+            password_hash = hash_password(master_password.get())
 
             database.add_profile_entry(
                 self.profiles_conn, profile_name, creation_date, salt, password_hash
@@ -55,7 +60,7 @@ class App:
             database.initialize_user_db(self.user_db_conn)
 
             self.profile_keys = derive_profile_keys(
-                master_password, profile_name, creation_date, salt
+                master_password.get(), profile_name, creation_date, salt
             )
             self.profile_name = profile_name
 
@@ -65,12 +70,12 @@ class App:
             # Load existing profile
             creation_date, salt, password_hash = profile_details
 
-            if not verify_password(password_hash, master_password):
+            if not verify_password(password_hash, master_password.get()):
                 logging.warning(f"Failed login attempt for profile: '{profile_name}'")
                 return False
 
             self.profile_keys = derive_profile_keys(
-                master_password, profile_name, creation_date, salt
+                master_password.get(), profile_name, creation_date, salt
             )
 
             user_db_path = database.get_user_profile_path(profile_name)
@@ -286,3 +291,19 @@ class App:
             logging.info(f"Deleted password for '{service}' ({username})")
         except sqlite3.Error as e:
             raise DatabaseError(f"Database error: {e}")
+
+    def delete_profile(self, profile_name: str):
+        """Securely deletes a user's profile and all associated data."""
+        if self.profile_name == profile_name and self.is_profile_loaded():
+            raise CoreException(
+                "Cannot delete the currently loaded profile. Switch profiles first."
+            )
+
+        # 1. Delete the profile record from the central database
+        database.delete_profile_entry(self.profiles_conn, profile_name)
+
+        # 2. Securely delete the profile's encrypted database file
+        profile_path = database.get_user_profile_path(profile_name)
+        SecureDelete.secure_delete_file(profile_path)
+
+        logging.info(f"Securely deleted profile: {profile_name}")

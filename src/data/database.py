@@ -2,6 +2,7 @@
 
 import sqlite3
 import os
+from src.exceptions import CoreException
 
 # --- Path Management ---
 
@@ -28,16 +29,57 @@ def get_profiles_db_path():
     return os.path.join(get_storage_directory(), "profiles.db.enc")
 
 
-def get_user_profile_path(profile_name: str):
-    """Constructs the full, safe path for a user's encrypted profile database."""
-    storage_dir = get_storage_directory()
-    safe_filename = "".join(c for c in profile_name if c.isalnum() or c in ("_", "-"))
-    return os.path.join(storage_dir, f"{safe_filename}.db.enc")
-
-
 def get_device_token_path():
     """Returns the path to the device token file."""
     return os.path.join(get_storage_directory(), "device.token")
+
+
+def delete_profile_entry(conn, profile_name: str):
+    """Deletes a profile's metadata from the central profiles database."""
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM profiles WHERE profile_name = ?", (profile_name,))
+    conn.commit()
+
+
+# --- SECURITY FIX: Path Validation ---
+
+
+def validate_profile_path(profile_name: str) -> bool:
+    """
+    Validate that the generated profile path is safe and does not escape the storage directory.
+    Prevents path traversal attacks.
+    """
+    storage_dir = get_storage_directory()
+
+    # Sanitize filename in the same way get_user_profile_path does
+    safe_filename = "".join(c for c in profile_name if c.isalnum() or c in ("_", "-"))
+    if not safe_filename:
+        return False  # Reject empty or fully invalid names
+
+    full_path = os.path.join(storage_dir, f"{safe_filename}.db.enc")
+
+    # Resolve to absolute paths to perform a reliable check
+    abs_full_path = os.path.abspath(full_path)
+    abs_storage_dir = os.path.abspath(storage_dir)
+
+    # Check if the resolved path is within the storage directory
+    return os.path.commonpath([abs_full_path, abs_storage_dir]) == abs_storage_dir
+
+
+def get_user_profile_path(profile_name: str) -> str:
+    """
+    Constructs the full, safe path for a user's encrypted profile database.
+    FIXED: Added robust path traversal protection.
+    """
+    # First, validate the raw profile name to prevent traversal attacks
+    if not validate_profile_path(profile_name):
+        raise CoreException("Invalid profile name: Path traversal attempt detected.")
+
+    # If validation passes, proceed with creating the safe filename
+    storage_dir = get_storage_directory()
+    safe_filename = "".join(c for c in profile_name if c.isalnum() or c in ("_", "-"))
+
+    return os.path.join(storage_dir, f"{safe_filename}.db.enc")
 
 
 # --- Setup & File Management ---
@@ -106,7 +148,7 @@ def add_profile_entry(conn, profile_name, creation_date, salt, password_hash):
 
 
 def get_profile_details(conn, profile_name):
-    """Retrieves a specific profile's metadata from the central profiles database."""
+    """Retrieves a specific profile's metadata."""
     cursor = conn.cursor()
     cursor.execute(
         "SELECT creation_date, salt, password_hash FROM profiles WHERE profile_name = ?",

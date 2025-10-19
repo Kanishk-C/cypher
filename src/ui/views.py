@@ -6,6 +6,7 @@ import shutil
 import re
 from src.ui import colors
 from src.config import Config
+from src.core.crypto import InputLimits
 
 
 def get_terminal_width():
@@ -200,8 +201,7 @@ def show_recent_activity(entries):
 
 def prompt_password_masked(prompt_text="Password: "):
     """
-    Prompts for a password and displays asterisks instead of the typed characters.
-    Handles backspace and works on both Windows and POSIX systems.
+    Prompts for a password with length limit.
     """
     print(
         f"{colors.Colors.BRIGHT_BLUE}❯ {prompt_text}{colors.Colors.RESET} ",
@@ -209,55 +209,54 @@ def prompt_password_masked(prompt_text="Password: "):
         flush=True,
     )
     password = ""
+    max_length = InputLimits.MAX_PASSWORD_LENGTH
 
-    # Platform-specific logic to read single characters
     try:
-        import platform
-
         if platform.system() == "Windows":
             import msvcrt
 
             while True:
                 char = msvcrt.getch()
-                if char == b"\r":  # Enter key
+                if char == b"\r":
                     print()
                     break
-                elif char == b"\x08":  # Backspace key
+                elif char == b"\x08":
                     if len(password) > 0:
                         password = password[:-1]
-                        # Move cursor back, print space, move cursor back again
                         print("\b \b", end="", flush=True)
                 else:
                     try:
+                        if len(password) >= max_length:
+                            continue
                         password += char.decode("utf-8")
                         print("*", end="", flush=True)
                     except UnicodeDecodeError:
-                        pass  # Ignore characters that can't be decoded
+                        pass
         else:  # Linux or macOS
             import termios, tty, sys
 
             fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)  # type: ignore
+            old_settings = termios.tcgetattr(fd)
             try:
-                tty.setcbreak(fd)  # type: ignore
+                tty.setcbreak(fd)
                 while True:
                     char = sys.stdin.read(1)
-                    if char == "\n":  # Enter key
+                    if char == "\n":
                         print()
                         break
-                    elif char == "\x7f":  # Backspace key
+                    elif char == "\x7f":
                         if len(password) > 0:
                             password = password[:-1]
                             print("\b \b", end="", flush=True)
                     else:
+                        if len(password) >= max_length:
+                            continue
                         password += char
                         print("*", end="", flush=True)
             finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)  # type: ignore
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         return password
     except (ImportError, ModuleNotFoundError):
-        # Fallback to getpass if platform-specific modules are not available
-        print("(masked input not supported, falling back to hidden)")
         import getpass
 
         return getpass.getpass("")

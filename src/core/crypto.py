@@ -7,15 +7,80 @@ import base64
 import secrets
 import gc
 import time
+import tempfile
+import logging
 from typing import Tuple, Optional
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+
 from argon2.low_level import hash_secret, Type as Argon2Type
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.exceptions import InvalidTag
+
 from src.config import Config
 from src.exceptions import CoreException, DecryptionError
+from src.data.database import get_storage_directory
+
+
+# ============================================
+# SECURITY FIXES & ADDITIONS
+# ============================================
+
+
+def safe_string_compare(a: str, b: str) -> bool:
+    """Constant-time string comparison for secrets."""
+    if not isinstance(a, str) or not isinstance(b, str):
+        return False
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
+class InputLimits:
+    """Maximum input lengths to prevent memory exhaustion."""
+
+    MAX_PASSWORD_LENGTH = Config.MAX_PASSWORD_LENGTH
+    MAX_RECOVERY_PHRASE_LENGTH = Config.MAX_RECOVERY_PHRASE_LENGTH
+
+
+class SecureFileHandler:
+    """Secure file operations with atomic writes and proper locking."""
+
+    @staticmethod
+    def write_secure(path: str, data: bytes, mode: int = 0o600):
+        dir_path = os.path.dirname(path)
+        os.makedirs(dir_path, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(dir=dir_path, prefix=".tmp_cypher_")
+        try:
+            if hasattr(os, "chmod"):
+                os.chmod(temp_path, mode)
+            with os.fdopen(fd, "wb") as tmp_file:
+                tmp_file.write(data)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.replace(temp_path, path)
+        except Exception as e:
+            if os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
+            raise CoreException(f"Secure write failed: {e}")
+
+    @staticmethod
+    def read_secure(path: str) -> Optional[bytes]:
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except Exception as e:
+            raise CoreException(f"Failed to read {path}: {e}")
+
 
 # ========== Password Hashing ==========
 _ph = PasswordHasher(
@@ -28,12 +93,10 @@ _ph = PasswordHasher(
 
 
 def hash_password(password: str) -> str:
-    """Hash password using Argon2id."""
     return _ph.hash(password)
 
 
 def verify_password(password_hash: str, password: str) -> bool:
-    """Verify password against hash."""
     try:
         _ph.verify(password_hash, password)
         return True
@@ -43,12 +106,10 @@ def verify_password(password_hash: str, password: str) -> bool:
 
 # ========== Key Derivation ==========
 def generate_salt() -> bytes:
-    """Generate random salt."""
-    return os.urandom(Config.SALT_SIZE_BYTES)
+    return secrets.token_bytes(Config.SALT_SIZE_BYTES)
 
 
 def derive_keys(password: bytes, salt: bytes) -> Tuple[bytes, bytes]:
-    """Derive encryption and HMAC keys using Argon2id."""
     kdf = hash_secret(
         secret=password,
         salt=salt,
@@ -58,42 +119,36 @@ def derive_keys(password: bytes, salt: bytes) -> Tuple[bytes, bytes]:
         hash_len=Config.ARGON2_KEY_LEN,
         type=Argon2Type.ID,
     )
-    return kdf[:32], kdf[32:]  # enc_key, hmac_key
+    return kdf[:32], kdf[32:]
 
 
 def derive_profile_keys(
     password: str, profile: str, date: str, salt: bytes
 ) -> Tuple[bytes, bytes]:
-    """Derive profile-specific keys."""
     material = f"{password}{profile}{date}".encode("utf-8")
     return derive_keys(material, salt)
 
 
 def derive_device_keys(token: bytes, salt: bytes) -> Tuple[bytes, bytes]:
-    """Derive keys from device token."""
     return derive_keys(token, salt)
 
 
 def derive_recovery_keys(phrase: str, salt: bytes) -> Tuple[bytes, bytes]:
-    """Derive keys from recovery phrase."""
     return derive_keys(phrase.encode("utf-8"), salt)
 
 
 # ========== Encryption/Decryption ==========
 def encrypt_data(data: bytes, key: bytes) -> bytes:
-    """Encrypt using AES-256-GCM."""
     aesgcm = AESGCM(key)
-    nonce = os.urandom(12)
+    nonce = secrets.token_bytes(12)
     ciphertext = aesgcm.encrypt(nonce, data, None)
     return nonce + ciphertext
 
 
 def decrypt_data(token: bytes, key: bytes) -> bytes:
-    """Decrypt data."""
     try:
         aesgcm = AESGCM(key)
-        nonce = token[:12]
-        ciphertext = token[12:]
+        nonce, ciphertext = token[:12], token[12:]
         return aesgcm.decrypt(nonce, ciphertext, None)
     except InvalidTag:
         raise DecryptionError(
@@ -103,22 +158,17 @@ def decrypt_data(token: bytes, key: bytes) -> bytes:
 
 # ========== Integrity Verification ==========
 class IntegrityVerifier:
-    """HMAC-based integrity verification."""
-
     @staticmethod
     def create_hmac(data: bytes, key: bytes) -> bytes:
-        """Create HMAC-SHA256 tag."""
         return hmac.new(key, data, hashlib.sha256).digest()
 
     @staticmethod
     def verify_hmac(data: bytes, tag: bytes, key: bytes) -> bool:
-        """Verify HMAC tag."""
-        expected = IntegrityVerifier.create_hmac(data, key)
-        return hmac.compare_digest(tag, expected)
+        expected_tag = IntegrityVerifier.create_hmac(data, key)
+        return hmac.compare_digest(tag, expected_tag)
 
     @staticmethod
     def protect_data(data: bytes, enc_key: bytes, hmac_key: bytes) -> bytes:
-        """Encrypt data and append HMAC (Encrypt-then-MAC)."""
         b64_key = base64.urlsafe_b64encode(enc_key)
         encrypted = Fernet(b64_key).encrypt(data)
         tag = IntegrityVerifier.create_hmac(encrypted, hmac_key)
@@ -126,21 +176,24 @@ class IntegrityVerifier:
 
     @staticmethod
     def verify_and_decrypt(data: bytes, enc_key: bytes, hmac_key: bytes) -> bytes:
-        """Verify HMAC and decrypt."""
         if len(data) < Config.HMAC_SIZE_BYTES:
-            raise CoreException("Invalid encrypted data")
+            raise CoreException("Invalid encrypted data: too short for HMAC tag.")
 
-        encrypted = data[: -Config.HMAC_SIZE_BYTES]
-        tag = data[-Config.HMAC_SIZE_BYTES :]
+        encrypted_data, tag = (
+            data[: -Config.HMAC_SIZE_BYTES],
+            data[-Config.HMAC_SIZE_BYTES :],
+        )
 
-        if not IntegrityVerifier.verify_hmac(encrypted, tag, hmac_key):
-            raise CoreException("Integrity verification failed")
+        if not IntegrityVerifier.verify_hmac(encrypted_data, tag, hmac_key):
+            raise CoreException(
+                "Integrity verification failed - data may have been tampered with."
+            )
 
         try:
             b64_key = base64.urlsafe_b64encode(enc_key)
-            return Fernet(b64_key).decrypt(encrypted)
+            return Fernet(b64_key).decrypt(encrypted_data)
         except InvalidToken:
-            raise CoreException("Decryption failed")
+            raise DecryptionError("Decryption failed: invalid token.")
 
 
 # ========== Secure Memory ==========
@@ -173,45 +226,6 @@ class SecureMemory:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.clear()
-
-
-# ========== Secure File Handler ==========
-class SecureFileHandler:
-    """Secure file operations."""
-
-    @staticmethod
-    def write_secure(path: str, data: bytes, mode: int = 0o600):
-        """Write file with secure permissions."""
-        temp_path = path + ".tmp"
-        try:
-            with open(temp_path, "wb") as f:
-                f.write(data)
-
-            if hasattr(os, "chmod"):
-                os.chmod(temp_path, mode)
-
-            if os.path.exists(path):
-                os.replace(temp_path, path)
-            else:
-                os.rename(temp_path, path)
-        except Exception as e:
-            if os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except:
-                    pass
-            raise CoreException(f"Secure write failed: {e}")
-
-    @staticmethod
-    def read_secure(path: str) -> Optional[bytes]:
-        """Read file securely."""
-        if not os.path.exists(path):
-            return None
-        try:
-            with open(path, "rb") as f:
-                return f.read()
-        except Exception as e:
-            raise CoreException(f"Failed to read {path}: {e}")
 
 
 # ========== Rate Limiter ==========

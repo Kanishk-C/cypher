@@ -108,4 +108,15 @@ def initialize_parser():
     )
     clear.set_defaults(func=commands.clear_command)
 
+    # Delete Profile
+    delete_profile = subparsers.add_parser(
+        "delete-profile",
+        help="Permanently delete a profile and all its data",
+        formatter_class=CustomHelpFormatter,
+    )
+    delete_profile.add_argument(
+        "profile_name", help="The name of the profile to delete"
+    )
+    delete_profile.set_defaults(func=commands.delete_profile_command)
+
     return parser

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cypher-cli"
-version = "0.9.0"
+version = "1.0.0" # Version bumped for release
 description = "A secure local password manager."
 authors = ["Kanishk C <kanishkc01@gmail.com>"]
 license = "MIT"
@@ -17,6 +17,14 @@ argon2-cffi = ">=25.1.0,<26.0.0"
 
 [tool.poetry.scripts]
 cypher = "src.__main__:main"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0"
+pytest-cov = ">=4.1.0"
+black = ">=24.0.0"
+flake8 = ">=7.0.0"
+mypy = ">=1.8.0"
+bandit = ">=1.7.5"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

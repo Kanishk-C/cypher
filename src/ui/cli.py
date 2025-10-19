@@ -4,12 +4,20 @@ import logging
 import shlex
 import time
 import os
+import threading
 from src.data import database
 from src.core import app, auth
-from src.core.crypto import RateLimiter  # FIX: Changed import from security to crypto
+from src.core.session_manager import SessionManager
+from src.core.crypto import RateLimiter
 from src.ui import views, parser, colors, commands
 
 _rate_limiter = RateLimiter()
+SESSION_TIMED_OUT = threading.Event()
+
+
+def handle_timeout():
+    """Callback function executed by the SessionManager on timeout."""
+    SESSION_TIMED_OUT.set()
 
 
 def setup_logging():
@@ -40,7 +48,6 @@ def start_interactive_shell(app_session: app.App) -> str:
         services = set(service for service, _ in entries)
         views.show_stats(len(entries), len(services))
         if entries:
-            # FIX: Removed the 'limit' parameter as it's no longer supported
             views.show_recent_activity(entries)
     except Exception:
         pass
@@ -59,10 +66,27 @@ def start_interactive_shell(app_session: app.App) -> str:
         "help",
         "switch",
         "exit",
+        "delete-profile",
     ]
 
+    # Initialize and start the session manager
+    session_manager = SessionManager(on_timeout=handle_timeout)
+    session_manager.start()
+    SESSION_TIMED_OUT.clear()
+
     while True:
+        # Check for session timeout at the beginning of each loop
+        if SESSION_TIMED_OUT.is_set():
+            views.show_warning(
+                "\nSession timed out due to inactivity. Profile has been locked."
+            )
+            session_manager.stop()
+            return "SWITCH"  # Force re-authentication
+
         try:
+            # Reset the inactivity timer with each user prompt
+            session_manager.reset_timer()
+
             prompt = (
                 f"{colors.Colors.BRIGHT_CYAN}cypher"
                 f"{colors.Colors.RESET}@{colors.Colors.BRIGHT_GREEN}{app_session.profile_name}"
@@ -75,8 +99,10 @@ def start_interactive_shell(app_session: app.App) -> str:
 
             lower_input = raw_input.lower()
             if lower_input in ("exit", "quit", "q"):
+                session_manager.stop()  # Stop timer on exit
                 return "EXIT"
             if lower_input in ("switch", "reload", "restart"):
+                session_manager.stop()  # Stop timer on switch
                 return "SWITCH"
 
             try:
@@ -84,6 +110,7 @@ def start_interactive_shell(app_session: app.App) -> str:
                 args = arg_parser.parse_args(split_input)
                 if hasattr(args, "func"):
                     if args.func == commands.switch_command:
+                        session_manager.stop()
                         return "SWITCH"
                     args.func(args, app_session)
                 else:
@@ -94,12 +121,14 @@ def start_interactive_shell(app_session: app.App) -> str:
                 views.show_error(f"Invalid command format: {e}")
 
         except KeyboardInterrupt:
+            session_manager.stop()  # Stop timer on interrupt
             print()
             return "EXIT"
         except Exception as e:
             logging.exception(f"Unexpected error in main loop: {e}")
             views.show_error("An unexpected error occurred.")
 
+    session_manager.stop()  # Ensure timer is stopped on normal exit
     return "EXIT"
 
 

@@ -1,11 +1,11 @@
 """Command handlers with improved validation and UX."""
 
-import getpass
-import random
+import secrets
 import string
 from src.core import app
+from src.core.crypto import safe_string_compare
+from src.core.secure_string import SecureString
 from src.utils.validators import InputValidator
-from src.utils.formatters import UIFormatter
 from src.ui import views, colors
 from src.exceptions import (
     CoreException,
@@ -34,15 +34,20 @@ def add_command(args, app_session: app.App):
             views.show_warning(msg)
             return
 
-        password = views.prompt_password_masked(f"Password for '{service}':")
-        password_confirm = views.prompt_password_masked("Confirm password:")
-        if password != password_confirm:
+        password_str = views.prompt_password_masked(f"Password for '{service}':")
+        confirm_str = views.prompt_password_masked("Confirm password:")
+
+        if not safe_string_compare(password_str, confirm_str):
             views.show_error("Passwords do not match.")
             return
 
         notes = views.prompt_input("Notes (optional):")
+        valid, msg = InputValidator.validate_notes(notes)
+        if not valid:
+            views.show_warning(msg)
+            return
 
-        app_session.add_password(service, username, password, notes)
+        app_session.add_password(service, username, password_str, notes)
         views.show_success(f"Entry for '{service}' saved successfully!")
 
     except DuplicateEntryError as e:
@@ -126,42 +131,28 @@ def update_command(args, app_session: app.App):
     try:
         service = args.service
         username = args.username
-
-        # Verify entry exists
-        views.show_loading(f"Loading entry for '{service}'")
         current_entry = app_session.get_specific_entry(service, username)
-        views.clear_loading()
 
-        print(
-            f"\n{colors.Colors.BRIGHT_YELLOW}Enter new values (press Enter to keep current):{colors.Colors.RESET}"
+        views.show_info(
+            f"Updating entry for {service} ({username}). Press Enter to keep current values."
         )
 
-        # Get new password
         new_password = views.prompt_password_masked("New password (or Enter to keep):")
         if new_password:
-            valid, msg = InputValidator.validate_password_strength(new_password)
-            if not valid:
-                views.show_error(msg)
-                return
-
             password_confirm = views.prompt_password_masked("Confirm new password:")
-            if new_password != password_confirm:
+            if not safe_string_compare(new_password, password_confirm):
                 views.show_error("Passwords do not match. Update cancelled.")
                 return
         else:
             new_password = current_entry["password"]
 
-        # Get new notes
-        new_notes = views.prompt_input("New notes (or Enter to keep):")
-        if not new_notes:
-            new_notes = current_entry.get("notes", "")
+        new_notes = views.prompt_input(
+            "New notes (or Enter to keep):"
+        ) or current_entry.get("notes", "")
 
-        # Confirm update
         if views.confirm_action("Save these changes?"):
-            views.show_loading("Updating entry")
             app_session.delete_password(service, username)
             app_session.add_password(service, username, new_password, new_notes)
-            views.clear_loading()
             views.show_success(f"Entry for '{service}' updated successfully!")
         else:
             views.show_info("Update cancelled.")
@@ -200,34 +191,39 @@ def generate_password_command(args, app_session: app.App):
         length_input = views.prompt_input("Password length (default: 16):")
         length = int(length_input) if length_input.isdigit() else 16
 
-        char_pool = ""
-        password_chars = []
+        if length < 8:
+            length = 8
+        if length > 128:
+            length = 128
 
-        if views.confirm_action("Include lowercase letters (abc)?"):
+        char_pool, password_chars = "", []
+
+        if views.confirm_action("Include lowercase? (abc)"):
             char_pool += string.ascii_lowercase
-            password_chars.append(random.choice(string.ascii_lowercase))
-        if views.confirm_action("Include uppercase letters (ABC)?"):
+            password_chars.append(secrets.choice(string.ascii_lowercase))
+        if views.confirm_action("Include uppercase? (ABC)"):
             char_pool += string.ascii_uppercase
-            password_chars.append(random.choice(string.ascii_uppercase))
-        if views.confirm_action("Include numbers (123)?"):
+            password_chars.append(secrets.choice(string.ascii_uppercase))
+        if views.confirm_action("Include numbers? (123)"):
             char_pool += string.digits
-            password_chars.append(random.choice(string.digits))
-        if views.confirm_action("Include symbols (!@#)?"):
+            password_chars.append(secrets.choice(string.digits))
+        if views.confirm_action("Include symbols? (!@#)"):
             symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?"
             char_pool += symbols
-            password_chars.append(random.choice(symbols))
+            password_chars.append(secrets.choice(symbols))
 
         if not char_pool:
-            views.show_error("Cannot generate a password with no character sets.")
+            views.show_error(
+                "Cannot generate a password with no character sets selected."
+            )
             return
 
         remaining_length = length - len(password_chars)
-        if remaining_length > 0:
-            password_chars.extend(
-                random.choice(char_pool) for _ in range(remaining_length)
-            )
+        password_chars.extend(
+            secrets.choice(char_pool) for _ in range(remaining_length)
+        )
 
-        random.shuffle(password_chars)
+        secrets.SystemRandom().shuffle(password_chars)
         password = "".join(password_chars)
 
         views.display_generated_password(password)
@@ -242,36 +238,57 @@ def generate_password_command(args, app_session: app.App):
                 views.show_warning(
                     "Service and username are required. Password not saved."
                 )
-
     except (ValueError, CoreException) as e:
         views.show_error(str(e))
 
 
 def switch_command(args, app_session: app.App):
-    """Signal handler for the switch command."""
-    pass  # Handled in the CLI loop
+    pass
 
 
-# --- Helper Flows for CLI ---
+def clear_command(args, app_session: app.App):
+    views.clear_screen()
+    views.show_banner()
+    if app_session.profile_name:
+        views.show_profile_header(app_session.profile_name)
+
+
+def delete_profile_command(args, app_session: app.App):
+    profile_name = args.profile_name.lower()
+    views.show_warning(
+        f"You are about to permanently delete the profile '{profile_name}' and all its data."
+    )
+    if views.confirm_action("This action is irreversible. Are you sure?"):
+        try:
+            app_session.delete_profile(profile_name)
+            views.show_success(f"Profile '{profile_name}' has been securely deleted.")
+        except CoreException as e:
+            views.show_error(str(e))
+
+
+# --- Helper Flows for CLI (FIXED) ---
 
 
 def create_new_profile_flow(profile_name: str) -> str | None:
     """Guides user through creating a new profile and master password."""
     views.show_section_header(f"Create New Profile: {profile_name}")
     while True:
-        p1 = views.prompt_password_masked(
+        p1_str = views.prompt_password_masked(
             f"Create master password (min {Config.MIN_MASTER_PASSWORD_LENGTH} chars):"
         )
         valid, msg = InputValidator.validate_password_strength(
-            p1, Config.MIN_MASTER_PASSWORD_LENGTH
+            p1_str, Config.MIN_MASTER_PASSWORD_LENGTH
         )
         if not valid:
             views.show_warning(msg)
             continue
 
-        p2 = views.prompt_password_masked("Confirm master password:")
-        if p1 == p2:
-            return p1
+        p2_str = views.prompt_password_masked("Confirm master password:")
+
+        if safe_string_compare(p1_str, p2_str):
+            # Return the raw string for immediate use by the calling function.
+            # The calling function is responsible for its secure handling.
+            return p1_str
         else:
             views.show_error("Passwords do not match.")
             if not views.confirm_action("Try again?"):
@@ -282,10 +299,12 @@ def login_flow(app_session: app.App, profile_name: str) -> bool:
     """Handles the login process for an existing profile."""
     max_attempts = 3
     for attempt in range(max_attempts):
-        master_password = views.prompt_password_masked(
+        master_password_str = views.prompt_password_masked(
             f"Master password for '{profile_name}':"
         )
-        if app_session.load_user_profile(profile_name, master_password):
+
+        # Pass the raw string to load_user_profile, which handles it securely
+        if app_session.load_user_profile(profile_name, master_password_str):
             return True
         else:
             remaining = max_attempts - attempt - 1
@@ -295,11 +314,3 @@ def login_flow(app_session: app.App, profile_name: str) -> bool:
                 views.show_error("Too many failed attempts.")
                 return False
     return False
-
-
-def clear_command(args, app_session: app.App):
-    """Handles clearing the terminal screen."""
-    views.clear_screen()
-    views.show_banner()
-    if app_session.profile_name:
-        views.show_profile_header(app_session.profile_name)
