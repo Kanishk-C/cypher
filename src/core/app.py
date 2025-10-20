@@ -150,6 +150,28 @@ class App:
                 logging.error(f"Error unloading profile: {e}")
                 raise CoreException(f"Failed to save profile: {e}")
 
+    def save_profile(self):
+        """Saves the current user profile to disk."""
+        if self.is_profile_loaded():
+            # This is a simplified version of the unload_profile logic
+            # In a real application, you would extract the saving logic into a shared method
+            user_db_conn = self.user_db_conn
+            profile_keys = self.profile_keys
+            profile_name = self.profile_name
+
+            db_dump = io.StringIO()
+            for line in user_db_conn.iterdump():
+                db_dump.write(f"{line}\n")
+            db_bytes = db_dump.getvalue().encode("utf-8")
+
+            protected_db = IntegrityVerifier.protect_data(
+                db_bytes, profile_keys[0], profile_keys[1]
+            )
+
+            SecureFileHandler.write_secure(
+                database.get_user_profile_path(profile_name), protected_db
+            )
+
     def close_and_save_session(self):
         """Save all data on exit."""
         try:
@@ -198,6 +220,7 @@ class App:
                 user_db_conn, service, username, encrypted, notes
             )
             logging.info(f"Added password for '{service}' ({username})")
+            self.save_profile()
         except sqlite3.IntegrityError:
             raise DuplicateEntryError(
                 f"Entry for '{service}' and '{username}' already exists."
@@ -290,6 +313,7 @@ class App:
                 )
 
             logging.info(f"Deleted password for '{service}' ({username})")
+            self.save_profile()
         except sqlite3.Error as e:
             raise DatabaseError(f"Database error: {e}")
 

@@ -16,7 +16,7 @@ class Config:
     # Argon2 Parameters - OPTIMIZED FOR DEVELOPMENT/TESTING
     # For production, increase memory_cost to 65536 or higher
     ARGON2_TIME_COST = 2  # Iterations
-    ARGON2_MEMORY_COST = 65536 if IS_PRODUCTION else 512  # Production: 64 MiB
+    ARGON2_MEMORY_COST = 65536  # Production: 64 MiB
     ARGON2_PARALLELISM = 1  # Single thread
     ARGON2_KEY_LEN = 64  # Output length
     ARGON2_PASS_HASH_LEN = 32  # Hash length

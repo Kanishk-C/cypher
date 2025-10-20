@@ -155,9 +155,7 @@ def recover_access():
                 print(
                     f"{Colors.BRIGHT_RED}✗ Recovery data not found. Has initial setup been completed?{Colors.RESET}"
                 )
-                logging.error(
-                    "Recovery file not found during recovery attempt"
-                )  # FIXED: Added logging
+                logging.error("Recovery file not found during recovery attempt")
                 return False
 
             salt = recovery_store[: Config.SALT_SIZE_BYTES]

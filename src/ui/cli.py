@@ -146,8 +146,6 @@ def start_application():
             print(f"Press Enter to exit.{colors.Colors.RESET}\n")
 
             profile_name_input = views.prompt_input("Profile name:")
-
-            # FIXED: Check for empty input first
             if not profile_name_input:
                 break
 

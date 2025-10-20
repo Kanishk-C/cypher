@@ -2,7 +2,7 @@
 name = "cypher-cli"
 version = "1.0.0" # Version bumped for release
 description = "A secure local password manager."
-authors = ["Kanishk C <kanishkc01@gmail.com>"]
+authors = ["Kanishk C"]
 license = "MIT"
 readme = "README.md"
 packages = [
