@@ -1,4 +1,5 @@
 import pytest
+import os
 import sqlite3
 from src.data.database import *
 

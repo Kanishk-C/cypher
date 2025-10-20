@@ -1,3 +1,9 @@
+import os
+import pytest
+from src.core.crypto import derive_keys, encrypt_data, IntegrityVerifier
+from src.config import Config
+
+
 class TestCryptographicCorrectness:
     """Test cryptographic implementation correctness."""
 

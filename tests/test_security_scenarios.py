@@ -1,3 +1,15 @@
+import pytest
+import os
+from src.data.database import (
+    db_connect,
+    initialize_user_db,
+    get_storage_directory,
+    get_user_profile_path,
+    add_password_entry,
+)
+from src.core.crypto import encrypt_data, decrypt_data
+
+
 class TestSecurityScenarios:
     """Test real-world security scenarios."""
 

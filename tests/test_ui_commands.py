@@ -1,5 +1,7 @@
-from src.ui import commands
+import pytest
 from unittest.mock import Mock, patch
+from src.ui import commands
+from src.exceptions import DuplicateEntryError
 
 
 class TestCommandHandlers:
