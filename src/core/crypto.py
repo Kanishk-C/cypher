@@ -9,14 +9,14 @@ import gc
 import time
 import tempfile
 import logging
-import threading  # ADDED - Missing import
+import threading
 from typing import Tuple, Optional
+from collections import deque
 
 try:
     import fcntl
 except ImportError:
     fcntl = None
-
 from argon2.low_level import hash_secret, Type as Argon2Type
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -268,36 +268,30 @@ class RateLimiter:
 
 
 class NonceTracker:
-    """
-    Track used nonces to prevent IV reuse.
-    Note: In practice, with 96-bit nonces, collision is ~2^-96
-    This is mostly for paranoid security applications.
-    """
-
     def __init__(self, max_nonces: int = 100000):
         self._used_nonces = set()
+        self._nonce_queue = deque(maxlen=max_nonces)  # FIXED: Use deque
         self._max_nonces = max_nonces
         self._lock = threading.Lock()
 
     def check_and_register(self, nonce: bytes) -> bool:
-        """Check if nonce was used, register if not."""
         with self._lock:
             if nonce in self._used_nonces:
-                return False  # Collision detected!
+                return False
 
+            # Add to both set and queue
             self._used_nonces.add(nonce)
+            self._nonce_queue.append(nonce)
 
-            # Rotate set if too large
-            if len(self._used_nonces) > self._max_nonces:
-                # Remove oldest 20%
-                to_remove = len(self._used_nonces) // 5
-                for _ in range(to_remove):
-                    self._used_nonces.pop()
+            # FIXED: Keep set in sync with deque
+            if len(self._nonce_queue) >= self._max_nonces:
+                current_nonces = set(self._nonce_queue)
+                self._used_nonces = current_nonces
 
             return True
 
 
-# Global nonce tracker (optional)
+# Global nonce tracker
 _nonce_tracker = NonceTracker()
 
 

@@ -3,7 +3,7 @@ import gc
 import threading
 from typing import Optional, Callable
 from src.config import Config
-from ui.colors import Colors
+from src.ui.colors import Colors
 
 
 class SessionManager:
@@ -29,6 +29,7 @@ class SessionManager:
                 return
 
             self._checking = True
+            last_activity_snapshot = self.last_activity
 
         try:
             # Check timeout WITHOUT holding lock (allows activity updates)
@@ -73,13 +74,16 @@ class SessionManager:
             if not self._active or self._checking:
                 return
             self._checking = True
+            last_activity_snapshot = self.last_activity
 
         try:
             current_time = time.time()
             time_since_activity = current_time - self.last_activity
 
             # Warning at 80% of timeout
-            warning_threshold = self.timeout_seconds * 0.8
+            warning_threshold = (
+                self.timeout_seconds * Config.SESSION_TIMEOUT_WARNING_THRESHOLD
+            )
 
             if time_since_activity >= self.timeout_seconds:
                 # Actual timeout

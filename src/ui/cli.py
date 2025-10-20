@@ -6,6 +6,8 @@ from src.data import database
 from src.core import app, auth
 from src.core.crypto import RateLimiter
 from src.ui import views, parser, colors, commands
+from src.utils.validators import InputValidator  # ADDED: Import validator
+from src.config import Config  # ADDED: Import Config
 
 _rate_limiter = RateLimiter()
 
@@ -102,7 +104,7 @@ def start_interactive_shell(app_session: app.App) -> str:
 
 
 def start_application():
-    """Main application entry point - FIXED VERSION."""
+    """Main application entry point - FIXED VERSION with Config constants and validation."""
     app_session = None
     try:
         setup_logging()
@@ -125,7 +127,7 @@ def start_application():
 
         logging.info("Application unlocked successfully.")
         views.show_success("Session unlocked")
-        time.sleep(1)  # Brief pause to show success
+        time.sleep(Config.LOADING_DISPLAY_DURATION)  # FIXED: Use Config constant
 
         app_session = app.App(profiles_conn, session_god_key)
 
@@ -143,10 +145,19 @@ def start_application():
             )
             print(f"Press Enter to exit.{colors.Colors.RESET}\n")
 
-            profile_name = views.prompt_input("Profile name:").lower()
+            profile_name_input = views.prompt_input("Profile name:")
 
-            if not profile_name:
+            # FIXED: Check for empty input first
+            if not profile_name_input:
                 break
+
+            # FIXED: Validate and sanitize profile name
+            profile_name = profile_name_input.lower().strip()
+            valid, msg = InputValidator.validate_profile_name(profile_name)
+            if not valid:
+                views.show_error(msg)
+                time.sleep(Config.ERROR_DISPLAY_DURATION)  # FIXED: Use Config constant
+                continue
 
             # Rate limiting
             allowed, wait_time = _rate_limiter.check_attempt(profile_name)
@@ -154,7 +165,7 @@ def start_application():
                 views.show_error(
                     f"Too many failed attempts for '{profile_name}'. Please wait {wait_time} seconds."
                 )
-                time.sleep(3)  # Give user time to read error
+                time.sleep(Config.ERROR_DISPLAY_DURATION)  # FIXED: Use Config constant
                 continue
 
             profile_details = database.get_profile_details(profiles_conn, profile_name)
@@ -166,7 +177,9 @@ def start_application():
                 )
                 master_password = commands.create_new_profile_flow(profile_name)
                 if not master_password:
-                    time.sleep(1)
+                    time.sleep(
+                        Config.LOADING_DISPLAY_DURATION
+                    )  # FIXED: Use Config constant
                     continue
 
                 try:
@@ -183,16 +196,22 @@ def start_application():
                     if success:
                         _rate_limiter.reset(profile_name)
                         views.show_success(f"Profile '{profile_name}' created!")
-                        time.sleep(1.5)
+                        time.sleep(
+                            Config.SUCCESS_DISPLAY_DURATION
+                        )  # FIXED: Use Config constant
                     else:
                         views.show_error("Failed to create profile.")
-                        time.sleep(2)
+                        time.sleep(
+                            Config.ERROR_DISPLAY_DURATION
+                        )  # FIXED: Use Config constant
                         continue
                 except Exception as e:
                     print("\r" + " " * 50 + "\r", end="", flush=True)
                     views.show_error(f"Error creating profile: {e}")
                     logging.exception(f"Profile creation error")
-                    time.sleep(2)
+                    time.sleep(
+                        Config.ERROR_DISPLAY_DURATION
+                    )  # FIXED: Use Config constant
                     continue
             else:
                 # EXISTING PROFILE - Login
@@ -203,13 +222,17 @@ def start_application():
                     # FIXED: Don't clear screen before showing errors
                     if not commands.login_flow(app_session, profile_name):
                         # Login failed - give user time to read error
-                        time.sleep(2.5)
+                        time.sleep(
+                            Config.ERROR_DISPLAY_DURATION
+                        )  # FIXED: Use Config constant
                         continue
                     _rate_limiter.reset(profile_name)
                 except Exception as e:
                     views.show_error(f"Login error: {e}")
                     logging.exception(f"Login error")
-                    time.sleep(2.5)
+                    time.sleep(
+                        Config.ERROR_DISPLAY_DURATION
+                    )  # FIXED: Use Config constant
                     continue
 
             # Start interactive shell ONLY after successful login
@@ -223,7 +246,7 @@ def start_application():
                 views.show_error(f"Error in interactive shell: {e}")
                 logging.exception("Interactive shell error")
                 app_session.unload_profile()
-                time.sleep(2)
+                time.sleep(Config.ERROR_DISPLAY_DURATION)  # FIXED: Use Config constant
                 continue
 
     except KeyboardInterrupt:

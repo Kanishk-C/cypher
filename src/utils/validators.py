@@ -157,3 +157,36 @@ class InputValidator:
             return False, "Notes contain invalid null byte"
 
         return True, ""
+
+    @staticmethod
+    def validate_profile_name(profile_name: str) -> Tuple[bool, str]:
+        """Validate profile name format - NEW FUNCTION."""
+        if not profile_name or not profile_name.strip():
+            return False, "Profile name cannot be empty"
+
+        if len(profile_name) > Config.MAX_PROFILE_NAME_LENGTH:
+            return (
+                False,
+                f"Profile name too long (max {Config.MAX_PROFILE_NAME_LENGTH})",
+            )
+
+        if "\x00" in profile_name:
+            return False, "Profile name contains invalid null byte"
+
+        # Check for path traversal attempts
+        if ".." in profile_name or "/" in profile_name or "\\" in profile_name:
+            return False, "Profile name contains invalid path characters"
+
+        # Allow only alphanumeric, underscore, hyphen
+        if not re.match(r"^[a-zA-Z0-9_-]+$", profile_name):
+            return (
+                False,
+                "Profile name can only contain letters, numbers, underscore, and hyphen",
+            )
+
+        # Prevent reserved names
+        reserved_names = ["con", "prn", "aux", "nul", "com1", "com2", "lpt1", "lpt2"]
+        if profile_name.lower() in reserved_names:
+            return False, f"'{profile_name}' is a reserved name and cannot be used"
+
+        return True, ""

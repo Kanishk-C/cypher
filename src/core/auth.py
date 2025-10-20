@@ -13,6 +13,7 @@ from src.core.crypto import (
     IntegrityVerifier,
     SecureFileHandler,
     safe_string_compare,
+    RateLimiter,  # FIXED: Consolidated import
 )
 from src.data.database import (
     get_device_token_path,
@@ -24,13 +25,13 @@ from src.ui import views
 from src.ui.colors import Colors
 from src.utils.validators import InputValidator
 from src.config import Config
-from src.core.crypto import RateLimiter
 from src.exceptions import CoreException, DecryptionError
 from src.core.secure_string import SecureString
 
+# FIXED: Use Config constants instead of hardcoded values
 _recovery_rate_limiter = RateLimiter(
-    max_attempts=5, lockout_time=3600
-)  # 1 hour lockout
+    max_attempts=Config.RECOVERY_MAX_ATTEMPTS, lockout_time=Config.RECOVERY_LOCKOUT_TIME
+)
 
 
 def initial_setup():
@@ -154,6 +155,9 @@ def recover_access():
                 print(
                     f"{Colors.BRIGHT_RED}✗ Recovery data not found. Has initial setup been completed?{Colors.RESET}"
                 )
+                logging.error(
+                    "Recovery file not found during recovery attempt"
+                )  # FIXED: Added logging
                 return False
 
             salt = recovery_store[: Config.SALT_SIZE_BYTES]
@@ -205,10 +209,11 @@ def recover_access():
             logging.error(f"Recovery failed: {e}")
             return False
         except Exception as e:
-            print(
-                f"{Colors.BRIGHT_RED}✗ An unexpected error occurred during recovery.{Colors.RESET}"
-            )
-            logging.error(f"Unexpected recovery exception: {e}")
+            # FIXED: More specific error message and better logging
+            print(f"{Colors.BRIGHT_RED}✗ Recovery failed: {str(e)}{Colors.RESET}")
+            logging.error(
+                f"Unexpected recovery exception: {e}", exc_info=True
+            )  # FIXED: Added exc_info
             return False
 
 
@@ -225,6 +230,9 @@ def unlock_session():
             if recover_access():
                 device_token = SecureFileHandler.read_secure(get_device_token_path())
                 if not device_token:
+                    logging.error(
+                        "Device token still missing after recovery"
+                    )  # FIXED: Added logging
                     return None, None
             else:
                 return None, None
@@ -250,10 +258,13 @@ def unlock_session():
             raw_god_key = IntegrityVerifier.verify_and_decrypt(
                 protected_god_key, enc_key, hmac_key
             )
-        except CoreException:
+        except CoreException as e:  # FIXED: Added exception binding
             print(
                 f"{Colors.BRIGHT_YELLOW}⚠ Cannot decrypt with device token. Recovery needed.{Colors.RESET}\n"
             )
+            logging.warning(
+                f"Device token decryption failed: {e}"
+            )  # FIXED: Added logging
             if recover_access():
                 return unlock_session()
             return None, None
@@ -262,7 +273,9 @@ def unlock_session():
 
     except Exception as e:
         print(f"{Colors.BRIGHT_RED}✗ Device authentication failed: {e}{Colors.RESET}")
-        logging.error(f"Session unlock exception: {e}")
+        logging.error(
+            f"Session unlock exception: {e}", exc_info=True
+        )  # FIXED: Added exc_info
         return None, None
 
     profiles_conn = db_connect()
@@ -284,6 +297,9 @@ def unlock_session():
             print(
                 f"{Colors.BRIGHT_RED}✗ Could not decrypt profiles database: {e.message}{Colors.RESET}"
             )
+            logging.error(
+                f"Profiles database decryption failed: {e}"
+            )  # FIXED: Added logging
             profiles_conn.close()
             return None, None
 

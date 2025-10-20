@@ -1,5 +1,10 @@
+import os
+
+
 class Config:
     """Application configuration constants."""
+
+    IS_PRODUCTION = os.getenv("CYPHER_ENV", "development") == "production"
 
     # Security Parameters
     MIN_PASSWORD_LENGTH = 8
@@ -11,7 +16,7 @@ class Config:
     # Argon2 Parameters - OPTIMIZED FOR DEVELOPMENT/TESTING
     # For production, increase memory_cost to 65536 or higher
     ARGON2_TIME_COST = 2  # Iterations
-    ARGON2_MEMORY_COST = 512  # 512 KiB (~0.5 MB) - MUCH FASTER for testing
+    ARGON2_MEMORY_COST = 65536 if IS_PRODUCTION else 512  # Production: 64 MiB
     ARGON2_PARALLELISM = 1  # Single thread
     ARGON2_KEY_LEN = 64  # Output length
     ARGON2_PASS_HASH_LEN = 32  # Hash length
@@ -48,3 +53,12 @@ class Config:
     PROFILES_DB_FILE = "profiles.db.enc"
     LOG_FILE = "cypher_activity.log"
     SECURITY_AUDIT_LOG = "security_audit.log"
+
+    MAX_PROFILE_NAME_LENGTH = 50
+    SESSION_TIMEOUT_WARNING_THRESHOLD = 0.8
+    SESSION_TIMEOUT_CHECK_INTERVAL = 60
+    LOADING_DISPLAY_DURATION = 1.0
+    ERROR_DISPLAY_DURATION = 2.5
+    SUCCESS_DISPLAY_DURATION = 1.5
+    RECOVERY_MAX_ATTEMPTS = 5
+    RECOVERY_LOCKOUT_TIME = 3600

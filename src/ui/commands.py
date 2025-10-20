@@ -2,6 +2,7 @@
 
 import secrets
 import string
+from src.data import database
 from src.core import app
 from src.core.crypto import safe_string_compare
 from src.core.secure_string import SecureString
@@ -255,6 +256,17 @@ def clear_command(args, app_session: app.App):
 
 def delete_profile_command(args, app_session: app.App):
     profile_name = args.profile_name.lower()
+    all_profiles = database.get_all_profile_names(app_session.profiles_conn)
+    if profile_name not in all_profiles:
+        views.show_error(f"Profile '{profile_name}' does not exist.")
+        return
+
+    if app_session.profile_name == profile_name:
+        views.show_error(
+            "Cannot delete the currently loaded profile. Switch to another profile first."
+        )
+        return
+
     views.show_warning(
         f"You are about to permanently delete the profile '{profile_name}' and all its data."
     )
