@@ -67,19 +67,25 @@ def validate_profile_path(profile_name: str) -> bool:
 
 
 def get_user_profile_path(profile_name: str) -> str:
-    """
-    Constructs the full, safe path for a user's encrypted profile database.
-    FIXED: Added robust path traversal protection.
-    """
-    # First, validate the raw profile name to prevent traversal attacks
-    if not validate_profile_path(profile_name):
-        raise CoreException("Invalid profile name: Path traversal attempt detected.")
-
-    # If validation passes, proceed with creating the safe filename
     storage_dir = get_storage_directory()
+
+    # Sanitize FIRST
     safe_filename = "".join(c for c in profile_name if c.isalnum() or c in ("_", "-"))
 
-    return os.path.join(storage_dir, f"{safe_filename}.db.enc")
+    if not safe_filename:
+        raise CoreException("Invalid profile name: contains no valid characters.")
+
+    # Construct path
+    full_path = os.path.join(storage_dir, f"{safe_filename}.db.enc")
+
+    # Validate constructed path is safe
+    abs_full_path = os.path.abspath(full_path)
+    abs_storage_dir = os.path.abspath(storage_dir)
+
+    if not abs_full_path.startswith(abs_storage_dir + os.sep):
+        raise CoreException("Invalid profile name: Path traversal attempt detected.")
+
+    return full_path
 
 
 # --- Setup & File Management ---

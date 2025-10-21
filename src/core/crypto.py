@@ -278,21 +278,19 @@ class NonceTracker:
         Returns:
             True if nonce is unique (registered), False if collision detected
         """
+
         with self._lock:
-            # Check for collision
             if nonce in self._used_nonces:
                 return False
 
-            # Register nonce in queue (automatically evicts oldest when full)
-            self._nonce_queue.append(nonce)
-
-            # Keep set synchronized with queue
+            # Check if queue is full and remove oldest from set
             if len(self._nonce_queue) >= self._max_nonces:
-                # Queue is full, rebuild set from current queue contents
-                self._used_nonces = set(self._nonce_queue)
-            else:
-                # Queue not full yet, just add to set
-                self._used_nonces.add(nonce)
+                oldest = self._nonce_queue[0]
+                self._used_nonces.discard(oldest)
+
+            # Add new nonce
+            self._nonce_queue.append(nonce)
+            self._used_nonces.add(nonce)
 
             return True
 

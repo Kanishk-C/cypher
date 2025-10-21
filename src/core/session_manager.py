@@ -30,11 +30,12 @@ class SessionManager:
 
             self._checking = True
             last_activity_snapshot = self.last_activity
+            timeout_threshold = self.timeout_seconds
 
         try:
             # Check timeout WITHOUT holding lock (allows activity updates)
             current_time = time.time()
-            time_since_activity = current_time - self.last_activity
+            time_since_activity = current_time - last_activity_snapshot
 
             if time_since_activity >= self.timeout_seconds:
                 # Timeout occurred - trigger callback

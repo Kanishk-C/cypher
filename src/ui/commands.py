@@ -75,9 +75,12 @@ def add_command(args, app_session: app.App):
 
         confirm_str = views.prompt_password_masked("Confirm password:")
 
-        if not safe_string_compare(password_str, confirm_str):
-            views.show_error("Passwords do not match.")
-            return
+        with SecureString(password_str) as s_pass, SecureString(
+            confirm_str
+        ) as s_confirm:
+            if not safe_string_compare(s_pass.get(), s_confirm.get()):
+                views.show_error("Passwords do not match.")
+                return
 
         # Get optional notes
         notes = views.prompt_input("Notes (optional):")

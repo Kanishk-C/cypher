@@ -76,10 +76,21 @@ def verify_recovery_key_integrity(recovery_phrase: str) -> bool:
                 protected_god_key, enc_key, hmac_key
             )
 
-            # Verify decrypted key is correct length
+            # Verify length
             if len(god_key) != Config.KEY_SIZE_BYTES:
+                logging.error(f"Decrypted god key wrong size: {len(god_key)}")
+                return False
+
+            # Verify key is not all zeros (corrupted)
+            if god_key == b"\x00" * Config.KEY_SIZE_BYTES:
+                logging.error("God key is all zeros - corrupted")
+                return False
+
+            # Verify key has sufficient entropy
+            unique_bytes = len(set(god_key))
+            if unique_bytes < 16:  # At least 16 different byte values
                 logging.error(
-                    f"Decrypted god key wrong size: {len(god_key)} != {Config.KEY_SIZE_BYTES}"
+                    f"God key has insufficient entropy: {unique_bytes} unique bytes"
                 )
                 return False
 
