@@ -77,12 +77,8 @@ def get_user_profile_path(profile_name: str) -> str:
 
     # Construct path
     full_path = os.path.join(storage_dir, f"{safe_filename}.db.enc")
-
     # Validate constructed path is safe
-    abs_full_path = os.path.abspath(full_path)
-    abs_storage_dir = os.path.abspath(storage_dir)
-
-    if not abs_full_path.startswith(abs_storage_dir + os.sep):
+    if not validate_profile_path(profile_name):
         raise CoreException("Invalid profile name: Path traversal attempt detected.")
 
     return full_path

@@ -256,7 +256,7 @@ class NonceTracker:
     Prevents AES-GCM nonce reuse by tracking recently used nonces.
     """
 
-    def __init__(self, max_nonces: int = 100000):
+    def __init__(self, max_nonces: int = 10000):
         """
         Initialize nonce tracker.
 

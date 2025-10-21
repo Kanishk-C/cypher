@@ -173,36 +173,66 @@ class App:
             )
 
     def close_and_save_session(self):
-        """Save all data on exit."""
+        """
+        Save all data on exit, attempting every step even if some fail.
+        """
+        errors = []
+
+        # 1. Unload the current profile
         try:
             self.unload_profile()
+        except Exception as e:
+            error_msg = f"Failed to unload the current profile: {e}"
+            errors.append(error_msg)
+            logging.error(error_msg)
 
-            # Save profiles database
-            # Narrow type for profiles_conn
-            profiles_conn = self.profiles_conn
-            db_dump = io.StringIO()
-            for line in profiles_conn.iterdump():
-                db_dump.write(f"{line}\n")
-            db_bytes = db_dump.getvalue().encode("utf-8")
+        # 2. Save the profiles database and close the connection
+        profiles_conn = self.profiles_conn
+        try:
+            if profiles_conn:
+                # Create an in-memory SQL dump
+                db_dump = io.StringIO()
+                for line in profiles_conn.iterdump():
+                    db_dump.write(f"{line}\n")
+                db_bytes = db_dump.getvalue().encode("utf-8")
 
-            protected_db = IntegrityVerifier.protect_data(
-                db_bytes, self.session_god_key[0], self.session_god_key[1]
+                # Encrypt and protect the database dump
+                protected_db = IntegrityVerifier.protect_data(
+                    db_bytes, self.session_god_key[0], self.session_god_key[1]
+                )
+
+                # Write the protected data to disk
+                SecureFileHandler.write_secure(
+                    database.get_profiles_db_path(), protected_db
+                )
+        except Exception as e:
+            error_msg = f"Failed to save profiles database: {e}"
+            errors.append(error_msg)
+            logging.error(error_msg)
+        finally:
+            # This block ALWAYS runs, ensuring the connection is closed
+            # whether the try block succeeded or failed.
+            try:
+                if profiles_conn:
+                    profiles_conn.close()
+            except Exception as e:
+                error_msg = f"Failed to close database connection: {e}"
+                errors.append(error_msg)
+                logging.error(error_msg)
+
+        # 3. Final report to the user
+        if errors:
+            print(
+                f"\n{Colors.BRIGHT_YELLOW}⚠ Session closed with warnings:{Colors.RESET}"
             )
-
-            SecureFileHandler.write_secure(
-                database.get_profiles_db_path(), protected_db
-            )
-
-            profiles_conn.close()
-
+            for err in errors:
+                print(f"  - {err}")
+        else:
             print(
                 f"\n{Colors.BRIGHT_GREEN}✓ Session saved securely. Goodbye!{Colors.RESET}"
             )
-            logging.info("Session closed successfully")
 
-        except Exception as e:
-            logging.error(f"Error closing session: {e}")
-            print(f"\n{Colors.BRIGHT_RED}✗ Error saving session: {e}{Colors.RESET}")
+        logging.info("Session close sequence finished.")
 
     def add_password(self, service, username, password, notes=""):
         """Add a new password entry."""

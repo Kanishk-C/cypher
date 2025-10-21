@@ -160,7 +160,8 @@ def initial_setup():
             return
 
         # Store recovery phrase for use in this function
-        recovery_phrase_copy = s_phrase.get()
+        with SecureMemory(s_phrase.get().encode("utf-8")) as recovery_mem:
+            recovery_phrase_bytes = recovery_mem.get()
 
     print(f"{Colors.BRIGHT_GREEN}✓ Recovery phrase set{Colors.RESET}")
     print(

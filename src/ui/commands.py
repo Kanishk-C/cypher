@@ -227,7 +227,6 @@ def update_command(args, app_session: app.App):
     try:
         service = args.service
         username = args.username
-
         # Get current entry
         current_entry = app_session.get_specific_entry(service, username)
 
@@ -260,6 +259,36 @@ def update_command(args, app_session: app.App):
 
         # Update entry (delete + add)
         app_session.delete_password(service, username)
+        try:
+            # Backup current entry first
+            old_entry = app_session.get_specific_entry(service, username)
+
+            # Delete and re-add
+            app_session.delete_password(service, username)
+
+            try:
+                app_session.add_password(service, username, new_password, new_notes)
+                views.show_success(f"Entry for '{service}' updated successfully!")
+            except Exception as add_error:
+                # Rollback: restore original entry
+                try:
+                    app_session.add_password(
+                        service,
+                        username,
+                        old_entry["password"],
+                        old_entry.get("notes", ""),
+                    )
+                    views.show_error(
+                        f"Update failed: {add_error}. Original entry restored."
+                    )
+                except Exception as rollback_error:
+                    views.show_error(
+                        f"CRITICAL: Update failed and rollback failed. "
+                        f"Entry may be lost: {rollback_error}"
+                    )
+
+        except Exception as e:
+            views.show_error(str(e))
         app_session.add_password(service, username, new_password, new_notes)
         views.show_success(f"Entry for '{service}' updated successfully!")
 
