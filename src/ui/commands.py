@@ -1,5 +1,3 @@
-"""Command handlers with improved validation and UX - v1.0.0 PRODUCTION READY."""
-
 import secrets
 import string
 import shutil

@@ -1,5 +1,3 @@
-"""Authentication and recovery management - v1.0.0 PRODUCTION READY - BUGFIX."""
-
 import os
 import uuid
 import logging

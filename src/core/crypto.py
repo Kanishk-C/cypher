@@ -1,5 +1,3 @@
-"""Cryptographic operations and security utilities - v1.0.0 PRODUCTION READY."""
-
 import os
 import hmac
 import hashlib

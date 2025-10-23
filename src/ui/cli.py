@@ -1,5 +1,3 @@
-"""CLI interface and main application loop - v1.0.0 PRODUCTION READY."""
-
 import logging
 import shlex
 import time

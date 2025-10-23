@@ -1,5 +1,3 @@
-"""Initializes and configures the argparse parser for the CLI - v1.0.0 PRODUCTION READY."""
-
 import argparse
 import sys
 from src.ui import commands, colors
