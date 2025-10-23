@@ -114,12 +114,7 @@ class InputValidator:
         if len(words) < min_words:
             return False, f"Recovery phrase must have at least {min_words} words"
 
-        # Check word length
-        for word in words:
-            if len(word) < 3:
-                return False, "Recovery phrase words should be at least 3 characters"
-
-        # CHECK ENTROPY
+        # CHECK ENTROPY FIRST
         entropy = InputValidator.calculate_entropy(phrase)
         min_entropy = 60  # Approximately 60 bits of entropy
 
@@ -144,6 +139,11 @@ class InputValidator:
         for pattern in sequential_patterns:
             if pattern in phrase_lower:
                 return False, f"Avoid sequential patterns like '{pattern}'"
+
+        # Check word length last
+        for word in words:
+            if len(word) < 3:
+                return False, "Recovery phrase words should be at least 3 characters"
 
         return True, ""
 

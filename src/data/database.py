@@ -51,19 +51,16 @@ def validate_profile_path(profile_name: str) -> bool:
     """
     storage_dir = get_storage_directory()
 
-    # Sanitize filename in the same way get_user_profile_path does
-    safe_filename = "".join(c for c in profile_name if c.isalnum() or c in ("_", "-"))
-    if not safe_filename:
-        return False  # Reject empty or fully invalid names
-
-    full_path = os.path.join(storage_dir, f"{safe_filename}.db.enc")
+    # DO NOT sanitize before validation. Construct the path with the raw name.
+    full_path = os.path.join(storage_dir, f"{profile_name}.db.enc")
 
     # Resolve to absolute paths to perform a reliable check
     abs_full_path = os.path.abspath(full_path)
     abs_storage_dir = os.path.abspath(storage_dir)
 
-    # Check if the resolved path is within the storage directory
-    return os.path.commonpath([abs_full_path, abs_storage_dir]) == abs_storage_dir
+    # Check if the resolved path is within the storage directory.
+    # It must start with the storage directory path.
+    return abs_full_path.startswith(abs_storage_dir + os.sep)
 
 
 def get_user_profile_path(profile_name: str) -> str:

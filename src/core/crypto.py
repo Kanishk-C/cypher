@@ -212,7 +212,7 @@ def derive_profile_keys(
     Returns:
         Tuple of (encryption_key, hmac_key)
     """
-    material = f"{password}{profile}{date}".encode("utf-8")
+    material = f"{password}|{profile}|{date}".encode("utf-8")
     return derive_keys(material, salt)
 
 

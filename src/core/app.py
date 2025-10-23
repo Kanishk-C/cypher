@@ -4,7 +4,7 @@ import sqlite3
 import io
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, UTC, timezone
 from src.core.crypto import (
     hash_password,
     verify_password,
@@ -48,7 +48,7 @@ class App:
                 # Create new profile
                 logging.info(f"Creating new profile: '{profile_name}'")
                 salt = generate_salt()
-                creation_date = datetime.utcnow().isoformat()
+                creation_date = datetime.now(timezone.utc).isoformat()
                 password_hash = hash_password(master_password.get())
 
                 database.add_profile_entry(

@@ -1,4 +1,4 @@
-"""Authentication and recovery management - v1.0.0 PRODUCTION READY."""
+"""Authentication and recovery management - v1.0.0 PRODUCTION READY - BUGFIX."""
 
 import os
 import uuid
@@ -159,9 +159,8 @@ def initial_setup():
             logging.warning("Recovery phrase mismatch during setup")
             return
 
-        # Store recovery phrase for use in this function
-        with SecureMemory(s_phrase.get().encode("utf-8")) as recovery_mem:
-            recovery_phrase_bytes = recovery_mem.get()
+        # BUGFIX: Store recovery phrase string for later use
+        recovery_phrase_copy = s_phrase.get()
 
     print(f"{Colors.BRIGHT_GREEN}✓ Recovery phrase set{Colors.RESET}")
     print(
@@ -201,6 +200,7 @@ def initial_setup():
 
             # === STEP 3: Create and store recovery-bound god key ===
             salt_recovery = generate_salt()
+            # BUGFIX: Use recovery_phrase_copy instead of undefined variable
             enc_key_recovery, hmac_key_recovery = derive_recovery_keys(
                 recovery_phrase_copy, salt_recovery
             )
@@ -222,6 +222,7 @@ def initial_setup():
             flush=True,
         )
 
+        # BUGFIX: Use recovery_phrase_copy for verification
         if not verify_recovery_key_integrity(recovery_phrase_copy):
             # Recovery key verification FAILED
             print("\r" + " " * 50 + "\r", end="", flush=True)  # Clear line
