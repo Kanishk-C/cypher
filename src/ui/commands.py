@@ -508,6 +508,8 @@ def export_profile_command(args, app_session: app.App):
         app_session.save_profile()
         print("\r" + " " * 50 + "\r", end="", flush=True)
 
+        assert app_session.profile_name is not None
+
         # Copy encrypted profile file
         source = database.get_user_profile_path(app_session.profile_name)
 

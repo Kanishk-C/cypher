@@ -265,7 +265,7 @@ def prompt_password_masked(prompt_text: str = "Password: ") -> str:
             import msvcrt
 
             while True:
-                char = msvcrt.getch()
+                char = msvcrt.getch()  # type: ignore
                 if char == b"\r":
                     print()
                     break
