@@ -58,7 +58,7 @@ def initialize_parser():
 
     # Global help argument
     parser.add_argument(
-        "-h", "help", action="help", help="Show this help message and exit"
+        "-h", "--help", action="help", help="Show this help message and exit"
     )
 
     parser.add_argument(
