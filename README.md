@@ -123,7 +123,7 @@ Here is the revised roadmap incorporating your ideas, the original list, and som
 
 ## 🙌 Contributing
 
-Contributions, issues, and feature requests are welcome\! Feel free to check the [issues page](https://www.google.com/search?q=https://github.com/Kanishk-C/cypher/issues).
+Contributions, issues, and feature requests are welcome\! Feel free to check the [issues page](https://github.com/Kanishk-C/cypher/issues).
 
 ## 📄 License
 
