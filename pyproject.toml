@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "cypher-cli"
+name = "cypher"
 version = "1.0.0" # Version bumped for release
 description = "A secure local password manager."
 authors = ["Kanishk C"]
